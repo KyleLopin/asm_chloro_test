@@ -14,6 +14,7 @@ from pathlib import Path
 
 # installed libraries
 import matplotlib.pyplot as plt
+import numpy as np
 
 import pandas as pd
 
@@ -99,6 +100,30 @@ def add_leave_averages(_df: pd.DataFrame,
         _new_df.loc[_new_df[column_to_groupby] == leaf,
                     f"Avg {column_values_to_average}"] = leaf_avg
     return _new_df
+
+
+def gauss_function(x_line: np.array, height: float,
+                   center: float, sigma: float) -> np.array:
+    """ Create a Gaussian distribution.
+
+    Take a list or array of numbers and plot the Gaussian (normal) distribution along
+    the given array of numbers.
+
+    Args:
+        x_line (numpy.array, shape=(N,): Variables to evaluate the Gaussian function.
+        height (float): Peak height of the Gaussian.
+        center (float): Center position of the distribution
+        sigma (float): Standard deviation (variance) of the Gaussian distribution.
+
+    Returns:
+        numpy.array: An array of values representing the Gaussian distribution,
+        computed for each x in x_line.
+
+    The Gaussian distribution is defined as:
+    f(x) = height * exp(-(x - center)^2 / (2 * sigma^2))
+
+    """
+    return height*np.exp(-(x_line - center) ** 2 / (2 * sigma ** 2))
 
 
 if __name__ == '__main__':

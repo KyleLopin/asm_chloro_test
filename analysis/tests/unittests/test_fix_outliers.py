@@ -10,10 +10,11 @@ __author__ = "Kyle Vitautas Lopin"
 import unittest
 
 # installed libraries
+import numpy as np
 import pandas as pd
 
 # local files
-import analysis.chlorophyll_measurements.fix_outliers as fix_outliers
+from analysis.chlorophyll_measurements import fix_outliers
 
 
 class TestAddLeaveAverages(unittest.TestCase):
@@ -87,7 +88,7 @@ class TestAddLeaveAverages(unittest.TestCase):
         df = pd.DataFrame({'Leaf No.': [1, 1, 1], 'Column1': [1, 2, 3], 'Column2': [4, 5, 6]})
         # with unittest.raises(KeyError):
         #     fix_outliers.add_leave_average(df, 'Total Chlorophyll (µg/cm2)')
-        with self.assertRaises(KeyError) as context:
+        with self.assertRaises(KeyError) as _:
             fix_outliers.add_leave_averages(df, 'Total Chlorophyll (µg/cm2)')
 
     def test_raise_wrong_groupby(self):
@@ -96,7 +97,7 @@ class TestAddLeaveAverages(unittest.TestCase):
             'Leaf No.': [1, 1, 2, 2, 3, 3],
             'Total Chlorophyll (µg/cm2)': [10, 20, 30, 40, 50, 60]
         })
-        with self.assertRaises(KeyError) as context:
+        with self.assertRaises(KeyError) as _:
             fix_outliers.add_leave_averages(df, column_to_groupby="foobar")
 
     def test_generalize_groupby(self):
@@ -140,3 +141,17 @@ class TestAddLeaveAverages(unittest.TestCase):
 
         # Assert that the result is correct
         assert result.equals(df_correct)
+
+
+class TestGaussian(unittest.TestCase):
+    """ Test the Gaussian works, not robust """
+    def test_basic_gaussian(self):
+        """ Test the Gaussian works """
+        x_values = np.linspace(-5, 5, 11)
+        correct_results = [0.00037266531720786707, 0.033546262790251184, 1.1108996538242306,
+                           13.53352832366127, 60.653065971263345, 100.0,
+                           60.653065971263345, 13.53352832366127, 1.1108996538242306,
+                           0.033546262790251184, 0.00037266531720786707]
+
+        results = fix_outliers.gauss_function(x_values, 100, 0, 1)
+        self.assertListEqual(results.tolist(), correct_results)
