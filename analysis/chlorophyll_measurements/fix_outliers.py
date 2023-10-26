@@ -26,24 +26,28 @@ DATA_FOLDER = Path.cwd().parent.parent / "data" / "chlorophyll_data" / "collecte
 print(DATA_FOLDER)
 
 
-def get_data(leaf: str) -> pd.DataFrame:
+def get_data(leaf: str, use_columns: tuple[str] = ("Total Chlorophyll (µg/cm2)",
+                                                   "Spot", "Leaf No.")) -> pd.DataFrame:
     """ Load csv file with raw chlorophyll data for a set of leaves.
 
     Find a csv file with the name f"{leaf} Chlorophyll content.csv" in the DATA_FOLDER
-    and get the "Leaf No." and "Total Chlorophyll (µg/cm2)"
+    and get the "Leaf No." and "Total Chlorophyll (µg/cm2)".
 
     Args:
-        leaf (str): name of the leave to use, for this project, "Banana", "Jasmine",
+        leaf (str): Name of the leave to use, for this project, "Banana", "Jasmine",
         "Mango", "Rice", or "Sugarcane"
+        use_columns (tuple[str]): Name of the columns to get from the data file to return.
+        Use a tuple to prevent the defaults from mutating.
 
     Returns:
-        pd.DataFrame: of the chlorophyll measurements
+        pd.DataFrame: DataFrame of the file contents with the column names passed in.
 
     """
+    # set the data file path
     data_file = DATA_FOLDER / f"{leaf} Chlorophyll content.csv"
-    _data = pd.read_csv(data_file, usecols=["Total Chlorophyll (µg/cm2)",
-                                            "Leaf No."])
-    print(type(_data))
+    # read the data file, convert the use_columns to list if they are a tuple from defaults
+    _data = pd.read_csv(data_file, usecols=list(use_columns))
+    print(_data.columns)
     if "Leaf No." in _data.columns:
         _data = _data.ffill()
         _data["Leaf No."] = _data["Leaf No."].astype(int)
@@ -124,6 +128,10 @@ def gauss_function(x_line: np.array, height: float,
 
     """
     return height*np.exp(-(x_line - center) ** 2 / (2 * sigma ** 2))
+
+
+def remove_outliers(_df: pd.DataFrame):  # TODO:
+    pass
 
 
 if __name__ == '__main__':
