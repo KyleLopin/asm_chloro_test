@@ -49,9 +49,9 @@ def get_data(leaf: str) -> pd.DataFrame:
     return _data
 
 
-def add_leave_average(_df: pd.DataFrame,
-                      column_values_to_average: str = 'Total Chlorophyll (µg/cm2)',
-                      column_to_groupby: str = "Leaf No.") -> pd.DataFrame:
+def add_leave_averages(_df: pd.DataFrame,
+                       column_values_to_average: str = 'Total Chlorophyll (µg/cm2)',
+                       column_to_groupby: str = "Leaf No.") -> pd.DataFrame:
     """
 
     Args:
@@ -70,7 +70,7 @@ def add_leave_average(_df: pd.DataFrame,
         ...      'Leaf No.': [1, 1, 2, 2],
         ...      'Total Chlorophyll (µg/cm2)': [10, 20, 30, 40]
         ... })
-        >>> add_leave_average(df)
+        >>> add_leave_averages(df)
            Leaf No.  Total Chlorophyll (µg/cm2)  Avg Total Chlorophyll (µg/cm2)
         0         1                          10                            15.0
         1         1                          20                            15.0
