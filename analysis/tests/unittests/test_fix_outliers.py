@@ -155,3 +155,29 @@ class TestGaussian(unittest.TestCase):
 
         results = fix_outliers.gauss_function(x_values, 100, 0, 1)
         self.assertListEqual(results.tolist(), correct_results)
+
+
+class TestRemoveOutliers(unittest.TestCase):
+    def test_basic_remove_1_outlier(self):
+        df = pd.DataFrame({
+            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 3],
+            'Foobar': [1, 1, 1, 2, 2, 2, 3, 3, 12]
+        })
+        df_averages_correct = pd.DataFrame({
+            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 3],
+            'Foobar': [1, 1, 1, 2, 2, 2, 3, 3, 12],
+            "Avg Foobar": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 6.0, 6.0, 6.0]
+        })
+        df_final_correct = pd.DataFrame({
+            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 3],
+            'Foobar': [1, 1, 1, 2, 2, 2, 3, 3, 12],
+            "Avg Foobar": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 6.0, 6.0, 6.0]
+        })
+        new_df = fix_outliers.add_leave_averages(df, column_values_to_average="Foobar")
+        new_df.equals(df_averages_correct)
+        print(new_df)
+
+        results = fix_outliers.remove_outliers(new_df, column_name="Foobar")
+
+        print(results)
+        results.equals(df_final_correct)

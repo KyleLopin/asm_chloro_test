@@ -17,11 +17,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import pandas as pd
+from scipy.stats import zscore
 
 
 plt.style.use('bmh')
 
 LEAVE = "Banana"
+
 DATA_FOLDER = Path.cwd().parent.parent / "data" / "chlorophyll_data" / "collected_data"
 print(DATA_FOLDER)
 
@@ -130,10 +132,31 @@ def gauss_function(x_line: np.array, height: float,
     return height*np.exp(-(x_line - center) ** 2 / (2 * sigma ** 2))
 
 
-def remove_outliers(_df: pd.DataFrame):  # TODO:
-    pass
+def remove_outliers(_df: pd.DataFrame,
+                    column_name: str = 'Total Chlorophyll (µg/cm2)',
+                    sigma_cutoff: float = 3.0) -> pd.DataFrame:
+    if f"Avg {column_name}" not in _df.columns:
+        raise KeyError(f"The average of {column_name} must also be in the dataframe with"
+                       f"the columns name: 'Avg {column_name}'")
+    while True:  # loop till the break condition returns the final data frame
+        # calculate the residues of the column from their average
+        values = _df[column_name]
+        average_values = _df[f"Avg {column_name}"]
+        residues = values - average_values  # type: pd.Series
+        # get the z_scores of the indicated column
+        z_scores = zscore(residues)  # type: pd.Series
+        # go through the z_scores and remove the largest one, saving the indexes
+        # you can not just remove all z_score more than the cutoff because 1
+        # outlier in a series can affect the z_score of the other measurements
+        removed_indexes = []  # TODO: impliment this
+        if abs(z_scores.max()) < sigma_cutoff:
+            _df.drop(labels=z_scores.idxmax(), inplace=True)
+            return _df
+
 
 
 if __name__ == '__main__':
     data = get_data(LEAVE)
+    data = add_leave_averages(data)
     print(data)
+    remove_outliers(data)
