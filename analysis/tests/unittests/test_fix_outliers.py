@@ -159,6 +159,7 @@ class TestGaussian(unittest.TestCase):
 
 class TestRemoveOutliers(unittest.TestCase):
     def test_basic_remove_1_outlier(self):
+        """ Basic test fix_outliers.add_leave_averages was developed with """
         df = pd.DataFrame({
             'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 3],
             'Foobar': [1, 1, 1, 2, 2, 2, 3, 3, 12]
@@ -173,11 +174,21 @@ class TestRemoveOutliers(unittest.TestCase):
             'Foobar': [1, 1, 1, 2, 2, 2, 3, 3, 12],
             "Avg Foobar": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 6.0, 6.0, 6.0]
         })
-        new_df = fix_outliers.add_leave_averages(df, column_values_to_average="Foobar")
-        new_df.equals(df_averages_correct)
-        print(new_df)
+        # new_df = fix_outliers.add_leave_averages(df, column_values_to_average="Foobar")
+        # new_df.equals(df_averages_correct)
 
-        results = fix_outliers.remove_outliers(new_df, column_name="Foobar")
+        results, idx_removed = fix_outliers.remove_outliers(df, column_name="Foobar")
 
-        print(results)
         results.equals(df_final_correct)
+        self.assertListEqual(idx_removed, [8])
+
+    def test_basic_remove_2_outlier(self):
+        """ Basic test fix_outliers.add_leave_averages was developed with """
+        df = pd.DataFrame({'SampleNumber': [1, 1, 2, 2, 3, 3],
+                           'Value': [1, 2, 3, 20, 5, 6]})
+        df_final_correct = pd.DataFrame({'SampleNumber': [1, 1, 2, 3, 3],
+                                       'Value': [1, 2, 3, 5, 6]})
+        results, idx_removed = fix_outliers.remove_outliers(df, column_sample_number="SampleNumber",
+                                                            column_name="Value")
+        results.equals(df_final_correct)
+        self.assertListEqual(idx_removed, [3])

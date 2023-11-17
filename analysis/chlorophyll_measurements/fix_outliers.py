@@ -87,7 +87,8 @@ def add_leave_averages(_df: pd.DataFrame,
     """
     # error checking the correct columns are included
     if column_to_groupby not in _df.columns:
-        raise KeyError(f"'{column_to_groupby}' needs to be one of the columns in the dataframe")
+        raise KeyError(f"'{column_to_groupby}' needs to be one of the columns in the dataframe,"
+                       f" or the 'column_to_groupby' has to be supplied")
     if column_values_to_average not in _df.columns:
         raise KeyError(f"Can not average '{column_values_to_average}' "
                        f"as it is not in the dataframe")
@@ -161,6 +162,9 @@ def remove_outliers(_df: pd.DataFrame,
         - list: A list of indexes corresponding to the removed outliers in each iteration.
 
     """
+    if column_sample_number not in _df.columns:
+        raise KeyError(f"'{column_sample_number}' needs to be one of the columns in the dataframe,"
+                       f" or the 'column_to_groupby' has to be supplied")
     while True:  # loop till the break condition returns the final data frame
         # need to get the average of each sample every time in the iteration as removing outlying
         # measurements will change the average for the samples
@@ -177,9 +181,11 @@ def remove_outliers(_df: pd.DataFrame,
         # you can not just remove all z_score more than the cutoff because 1
         # outlier in a series can affect the z_score of the other measurements
         removed_indexes = []
-        if abs(z_scores.max()) < sigma_cutoff:
+        print(z_scores.max())
+        if abs(z_scores.max()) > sigma_cutoff:
             removed_indexes.append(z_scores.idxmax())
             _df.drop(labels=z_scores.idxmax(), inplace=True)
+        else:
             return _df, removed_indexes
 
 
@@ -188,3 +194,4 @@ if __name__ == '__main__':
     # data = add_leave_averages(data)
     print(data)
     pruned_df, removed_idx = remove_outliers(data)
+    print(removed_idx)
