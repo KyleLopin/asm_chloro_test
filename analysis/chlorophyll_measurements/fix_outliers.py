@@ -136,11 +136,11 @@ def gauss_function(x_line: np.array, height: float,
 def remove_outliers(_df: pd.DataFrame,
                     column_name: str = 'Total Chlorophyll (µg/cm2)',
                     column_sample_number: str = "Leaf No.",
-                    sigma_cutoff: float = 3.0) -> pd.DataFrame:
+                    sigma_cutoff: float = 3.0) -> tuple[pd.DataFrame, list]:
     """ Remove outliers of individual measurements from their average.
 
     Take a DataFrame that has a column with multiple measurements of the same sample and a column
-    with the column that labels which samples each measurement are for (column_sample_nimber),
+    with the column that labels which samples each measurement are for (column_sample_number),
     calculate the difference between each individual measurement with the
     average(residual), take the z-score of each residual and remove the sample with the largest
     z-score and repeat till all measurements have a z-score below the sigma_cutoff.
@@ -158,13 +158,16 @@ def remove_outliers(_df: pd.DataFrame,
         for considering data points as outliers. Defaults to 3.
 
     Returns:
-        - pd.DataFrame: The DataFrame with outliers removed after each iteration.
+        - pd.DataFrame: The DataFrame with outliers removed after each iteration and a new
+        column with the averages of the column_name based on column_sample_number with the column
+        name of "Avg {column_name}".
         - list: A list of indexes corresponding to the removed outliers in each iteration.
 
     """
     if column_sample_number not in _df.columns:
         raise KeyError(f"'{column_sample_number}' needs to be one of the columns in the dataframe,"
                        f" or the 'column_to_groupby' has to be supplied")
+    removed_indexes = []  # to store the indexes of the removed data
     while True:  # loop till the break condition returns the final data frame
         # need to get the average of each sample every time in the iteration as removing outlying
         # measurements will change the average for the samples
@@ -180,8 +183,6 @@ def remove_outliers(_df: pd.DataFrame,
         # go through the z_scores and remove the largest one, saving the indexes
         # you can not just remove all z_score more than the cutoff because 1
         # outlier in a series can affect the z_score of the other measurements
-        removed_indexes = []
-        print(z_scores.max())
         if abs(z_scores.max()) > sigma_cutoff:
             removed_indexes.append(z_scores.idxmax())
             _df.drop(labels=z_scores.idxmax(), inplace=True)
