@@ -158,37 +158,46 @@ class TestGaussian(unittest.TestCase):
 
 
 class TestRemoveOutliers(unittest.TestCase):
+    """ test the function remove_outliers in fix_outliers.py"""
     def test_basic_remove_1_outlier(self):
         """ Basic test fix_outliers.add_leave_averages was developed with """
         df = pd.DataFrame({
-            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 3],
-            'Foobar': [1, 1, 1, 2, 2, 2, 3, 3, 12]
-        })
-        df_averages_correct = pd.DataFrame({
-            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 3],
-            'Foobar': [1, 1, 1, 2, 2, 2, 3, 3, 12],
-            "Avg Foobar": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 6.0, 6.0, 6.0]
+            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5],
+            'Foobar': [0, 1, 2, 1, 2, 3, 3, 3, 120, 0, 1, 2, 0, 1, 2]
         })
         df_final_correct = pd.DataFrame({
-            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 3],
-            'Foobar': [1, 1, 1, 2, 2, 2, 3, 3, 12],
-            "Avg Foobar": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 6.0, 6.0, 6.0]
-        })
-        # new_df = fix_outliers.add_leave_averages(df, column_values_to_average="Foobar")
-        # new_df.equals(df_averages_correct)
-
+            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5],
+            'Foobar': [0, 1, 2, 1, 2, 3, 3, 3, 0, 1, 2, 0, 1, 2],
+            "Avg Foobar": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0,1.0]
+        }, index=[0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14])
         results, idx_removed = fix_outliers.remove_outliers(df, column_name="Foobar")
-
-        results.equals(df_final_correct)
+        pd.testing.assert_frame_equal(results, df_final_correct)
         self.assertListEqual(idx_removed, [8])
 
     def test_basic_remove_2_outlier(self):
         """ Basic test fix_outliers.add_leave_averages was developed with """
-        df = pd.DataFrame({'SampleNumber': [1, 1, 2, 2, 3, 3],
-                           'Value': [1, 2, 3, 20, 5, 6]})
-        df_final_correct = pd.DataFrame({'SampleNumber': [1, 1, 2, 3, 3],
-                                       'Value': [1, 2, 3, 5, 6]})
+        df = pd.DataFrame({'SampleNumber': [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5],
+                           'Value': [1, 2, 3, 3, 30, 3, 5, 6, 7, 7, 8, 9, 9, 10, 11]})
+        df_final_correct = pd.DataFrame({
+            'SampleNumber': [1, 1, 1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5],
+            'Value': [1, 2, 3, 3, 3, 5, 6, 7, 7, 8, 9, 9, 10, 11],
+            "Avg Value": [2.0, 2.0, 2.0, 3.0, 3.0, 6.0, 6.0, 6.0,
+                          8.0, 8.0, 8.0, 10.0, 10.0, 10.0]
+        }, index=[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
         results, idx_removed = fix_outliers.remove_outliers(df, column_sample_number="SampleNumber",
                                                             column_name="Value")
-        results.equals(df_final_correct)
-        self.assertListEqual(idx_removed, [3])
+        pd.testing.assert_frame_equal(results, df_final_correct)
+        self.assertListEqual(idx_removed, [4])
+
+    def test_remove_2_outliers(self):
+        """ Test that the fix_outliers.remove_outliers will remove 2 samples correctly"""
+        df = pd.DataFrame({'SampleNumber': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+                           'Value': [1, 2, 3, 20, 5, 6, 10, 100, 5, 5]})
+        df_final_correct = pd.DataFrame({'SampleNumber': [1, 1, 2, 3, 3, 4, 5, 5],
+                                         'Value': [1, 2, 3, 5, 6, 10, 5, 5],
+                                         "Avg Value": [1.5, 1.5, 3.0, 5.5, 5.5, 10.0, 5.0, 5.0]},
+                                        index=[0, 1, 2, 4, 5, 6, 8, 9])
+        results, idx_removed = fix_outliers.remove_outliers(df, column_sample_number="SampleNumber",
+                                                            column_name="Value", sigma_cutoff=2)
+        pd.testing.assert_frame_equal(results, df_final_correct)
+        self.assertListEqual(idx_removed, [7, 3])
