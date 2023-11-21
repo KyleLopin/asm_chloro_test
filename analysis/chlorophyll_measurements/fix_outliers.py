@@ -179,10 +179,11 @@ def remove_outliers(_df: pd.DataFrame,
         average_values = _df[f"Avg {column_name}"]
         residues = values - average_values  # type: pd.Series
         # get the z_scores of the indicated column
-        z_scores = zscore(residues)  # type: pd.Series
+        z_scores = zscore(residues).abs()  # type: pd.Series
         # go through the z_scores and remove the largest one, saving the indexes
         # you can not just remove all z_score more than the cutoff because 1
         # outlier in a series can affect the z_score of the other measurements
+        # print(f"zmax: {z_scores.max()}, max idx: {z_scores.idxmax()}")
         if abs(z_scores.max()) > sigma_cutoff:
             removed_indexes.append(z_scores.idxmax())
             _df.drop(labels=z_scores.idxmax(), inplace=True)
@@ -194,5 +195,11 @@ if __name__ == '__main__':
     data = get_data(LEAVE)
     # data = add_leave_averages(data)
     print(data)
+    print(data[data["Leaf No."] == 26])
+    print(data[data["Leaf No."] == 17])
     pruned_df, removed_idx = remove_outliers(data)
     print(removed_idx)
+    # figure out what leaves are removed to see if 1 leave had 2 outliers that got removed
+    print(data.iloc[removed_idx])
+    data_dict = data[(data["Leaf No."] < 10) | (data["Leaf No."] == 26)].to_dict()
+    print(data_dict)

@@ -168,7 +168,7 @@ class TestRemoveOutliers(unittest.TestCase):
         df_final_correct = pd.DataFrame({
             'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5],
             'Foobar': [0, 1, 2, 1, 2, 3, 3, 3, 0, 1, 2, 0, 1, 2],
-            "Avg Foobar": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0,1.0]
+            "Avg Foobar": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
         }, index=[0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14])
         results, idx_removed = fix_outliers.remove_outliers(df, column_name="Foobar")
         pd.testing.assert_frame_equal(results, df_final_correct)
@@ -201,3 +201,33 @@ class TestRemoveOutliers(unittest.TestCase):
                                                             column_name="Value", sigma_cutoff=2)
         pd.testing.assert_frame_equal(results, df_final_correct)
         self.assertListEqual(idx_removed, [7, 3])
+
+
+class TestRealDataProblems(unittest.TestCase):
+    """ When running the real chlorophyll data, these test are to examine any
+        apparent anomalies """
+    def test_select_banana_cases(self):
+        select_df = pd.DataFrame(
+            {'Leaf No.': {0: 1, 1: 1, 2: 1, 3: 2, 4: 2, 5: 2, 6: 3, 7: 3, 8: 3, 9: 4,
+                          10: 4, 11: 4, 12: 5, 13: 5, 14: 5, 15: 6, 16: 6, 17: 6,
+                          18: 7, 19: 7, 20: 7, 21: 8, 22: 8, 23: 8, 24: 9, 25: 9,
+                          26: 9, 75: 26, 76: 26, 77: 26},
+             'Spot': {0: 'A', 1: 'B', 2: 'C', 3: 'A', 4: 'B', 5: 'C', 6: 'A', 7: 'B',
+                      8: 'C', 9: 'A', 10: 'B', 11: 'C', 12: 'A', 13: 'B', 14: 'C',
+                      15: 'A', 16: 'B', 17: 'C', 18: 'A', 19: 'B', 20: 'C', 21: 'A',
+                      22: 'B', 23: 'C', 24: 'A', 25: 'B', 26: 'C', 75: 'A', 76: 'B', 77: 'C'},
+             'Total Chlorophyll (µg/cm2)':
+                 {0: 40.8005989, 1: 36.21977789, 2: 39.28469972,  3: 71.79441654,
+                  4: 69.1351489, 5: 73.29814435, 6: 62.05067553, 7: 65.15715263,
+                  8: 64.36948433, 9: 64.49128292, 10: 56.98083516, 11: 55.03746198,
+                  12: 59.41880173, 13: 62.39419962, 14: 60.6461767, 15: 56.80162222,
+                  16: 47.28889675, 17: 48.35210676, 18: 67.44996817, 19: 64.93131027,
+                  20: 68.43173233, 21: 82.75260192, 22: 83.41055858, 23: 78.4097569,
+                  24: 87.41269954, 25: 70.22698357, 26: 74.62139539, 75: 59.45025111,
+                  76: 26.10216217, 77: 62.9294617}})
+        _, idx_removed = fix_outliers.remove_outliers(
+            select_df, column_name='Total Chlorophyll (µg/cm2)',
+            sigma_cutoff=3)
+        self.assertListEqual([76, 24], idx_removed)
+
+
