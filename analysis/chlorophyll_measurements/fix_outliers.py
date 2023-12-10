@@ -59,7 +59,12 @@ def get_data(leaf: str, use_columns: tuple[str] = ("Total Chlorophyll (µg/cm2)"
 def add_leave_averages(_df: pd.DataFrame,
                        column_values_to_average: str = 'Total Chlorophyll (µg/cm2)',
                        column_to_groupby: str = "Leaf No.") -> pd.DataFrame:
-    """
+    """  Add a column of average values to a DataFrame, WILL OVERWRITE AN EXISTING COLUMN
+
+    Take a DataFrame with a column of individual measurements (column_values_to_average)
+    and their sample numbers (column_to_groupby) and calculate a new column with each samples
+    average value in a new column f"Avg {column_values_to_average}" that will be overwritten if
+    it exists on the inputted DataFrame
 
     Args:
         _df (pd.DataFrame): DataFrame to make the average column in
@@ -133,11 +138,11 @@ def gauss_function(x_line: np.array, height: float,
     return height*np.exp(-(x_line - center) ** 2 / (2 * sigma ** 2))
 
 
-def remove_outliers(_df: pd.DataFrame,
-                    column_name: str = 'Total Chlorophyll (µg/cm2)',
-                    column_sample_number: str = "Leaf No.",
-                    sigma_cutoff: float = 3.0) -> tuple[pd.DataFrame, list]:
-    """ Remove outliers of individual measurements from their average.
+def remove_outliers_recursive(_df: pd.DataFrame,
+                              column_name: str = 'Total Chlorophyll (µg/cm2)',
+                              column_sample_number: str = "Leaf No.",
+                              sigma_cutoff: float = 3.0) -> tuple[pd.DataFrame, list]:
+    """ Remove outliers of individual measurements from their average recursively.
 
     Take a DataFrame that has a column with multiple measurements of the same sample and a column
     with the column that labels which samples each measurement are for (column_sample_number),
@@ -178,12 +183,13 @@ def remove_outliers(_df: pd.DataFrame,
         values = _df[column_name]
         average_values = _df[f"Avg {column_name}"]
         residues = values - average_values  # type: pd.Series
+        print(residues.std())
         # get the z_scores of the indicated column
         z_scores = zscore(residues).abs()  # type: pd.Series
         # go through the z_scores and remove the largest one, saving the indexes
         # you can not just remove all z_score more than the cutoff because 1
         # outlier in a series can affect the z_score of the other measurements
-        # print(f"zmax: {z_scores.max()}, max idx: {z_scores.idxmax()}")
+        print(f"z max: {z_scores.max()}, max idx: {z_scores.idxmax()}")
         if abs(z_scores.max()) > sigma_cutoff:
             removed_indexes.append(z_scores.idxmax())
             _df.drop(labels=z_scores.idxmax(), inplace=True)
@@ -191,15 +197,100 @@ def remove_outliers(_df: pd.DataFrame,
             return _df, removed_indexes
 
 
+def remove_outliers(_df: pd.DataFrame,
+                              column_name: str = 'Total Chlorophyll (µg/cm2)',
+                              column_sample_number: str = "Leaf No.",
+                              sigma_cutoff: float = 3.0) -> tuple[pd.DataFrame, list]:
+    """ Remove outliers of individual measurements from their average.
+
+    Take a DataFrame that has a column with multiple measurements of the same sample and a column
+    with the label of the samples for each measurement (column_sample_number),
+    calculate the difference between each individual measurement with the
+    average (i.e. the residual).  The standard deviation of the original residues is calculated
+    and the
+
+    Args:
+        _df (pd.DataFrame): Input DataFrame containing the data.
+        column_name (str): The name of the column of the individual measurements for which
+        outliers are to be removed.
+        column_sample_number (str): The column used to show which measurements are from the
+         same sample.
+        sigma_cutoff (float, optional): The cutoff value in terms of standard deviations
+        for considering data points as outliers. Defaults to 3.
+
+    Returns:
+        - pd.DataFrame: The DataFrame with outliers removed after each iteration and a new
+        column with the averages of the column_name based on column_sample_number with the column
+        name of "Avg {column_name}".
+        - list: A list of indexes corresponding to the removed outliers in each iteration.
+
+    """
+    original_residue_std = None  # will work to save state for when the algorithm is first run
+
+    if column_sample_number not in _df.columns:
+        raise KeyError(f"'{column_sample_number}' needs to be one of the columns in the dataframe,"
+                       f" or the 'column_to_groupby' has to be supplied")
+    removed_indexes = []  # to store the indexes of the removed data
+    # loop through and calculate the averages, calculate the difference between the individual
+    # measurements and the average measurement (residue), calculate the standard deviation
+    # of the residues (the mean should be zero by tautology), calculate the z-scores from the
+    # standard deviation (only use the original standard deviation for all iterations),
+    # remove the largest absolute z-score until all calculated z-scores are below the threshold
+    while True:
+        # add the averages for each sample, will overwrite if needed
+        _df = add_leave_averages(_df, column_values_to_average=column_name,
+                                 column_to_groupby=column_sample_number)
+        # calculate the residues of the column from their average
+        values = _df[column_name]
+        average_values = _df[f"Avg {column_name}"]
+        residues = values - average_values  # type: pd.Series
+        # get the z_scores of the indicated column
+        if not original_residue_std:
+            # get the original standard deviation and check it calculated the z-scores correctly
+            z_scores_from_stats = zscore(residues, ddof=1)  # type: pd.Series
+            original_residue_std = residues.std()
+            z_scores_homemade = residues / original_residue_std
+            pd.testing.assert_series_equal(z_scores_from_stats, z_scores_homemade)  # make sure z
+        else:  # optional but prevent recalculating 2 times the first loop
+            z_scores_homemade = residues / original_residue_std
+        z_scores_homemade = z_scores_homemade.abs()
+        print(z_scores_homemade.idxmax())
+        print(z_scores_homemade)
+        if z_scores_homemade.max() > sigma_cutoff:
+            removed_indexes.append(z_scores_homemade.idxmax())
+            _df.drop(labels=z_scores_homemade.idxmax(), inplace=True)
+        else:
+            return _df, removed_indexes
+
+
+def check_atleast_x_measurements_per_leave(_df: pd.DataFrame,
+                                           column_name: str = "Leaf No.",
+                                           required_samples: int = 3,
+                                           ) -> pd.DataFrame:
+    """ Check that every leave has atleast 2 measurements, if less than 2 remove
+
+    Args:
+        _df:
+        column_name:
+        required_samples: 
+
+    Returns:
+
+    """
+    counts = _df[column_name].value_counts()
+    print(_df.shape)
+    print(counts)
+    print(counts[counts < 2])
+
+
 if __name__ == '__main__':
     data = get_data(LEAVE)
     # data = add_leave_averages(data)
-    print(data)
-    print(data[data["Leaf No."] == 26])
-    print(data[data["Leaf No."] == 17])
     pruned_df, removed_idx = remove_outliers(data)
+
     print(removed_idx)
     # figure out what leaves are removed to see if 1 leave had 2 outliers that got removed
     print(data.iloc[removed_idx])
-    data_dict = data[(data["Leaf No."] < 10) | (data["Leaf No."] == 26)].to_dict()
-    print(data_dict)
+    print(data[data["Leaf No."] == 26])
+    # print(data["Leaf No."].value_counts())
+    check_atleast_2_measurements_per_leave(pruned_df)

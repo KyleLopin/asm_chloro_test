@@ -19,7 +19,7 @@ from analysis.chlorophyll_measurements import fix_outliers
 
 class TestAddLeaveAverages(unittest.TestCase):
     """ Tests the funtion analysis.chlorophyll_measurements.fix_outliers add_leave_averages """
-    def test_add_leave_avgs_simple(self):
+    def test_simple(self):
         """ Test very simple protocol for fix_outliers.add_leave_average """
         # Create a dataframe with multiple Leaf No. and column_to_average columns
         df = pd.DataFrame({
@@ -40,7 +40,7 @@ class TestAddLeaveAverages(unittest.TestCase):
         # Assert that the result is correct
         assert result.equals(df_correct)
 
-    def test_add_leave_avgs_default_args(self):
+    def test_default_args(self):
         """ Test that the add_leave_args will work with default arguments """
         # Create a dataframe with multiple Leaf No. and column_to_average columns
         df = pd.DataFrame({
@@ -61,7 +61,27 @@ class TestAddLeaveAverages(unittest.TestCase):
         # Assert that the result is correct
         assert result.equals(df_correct)
 
-    def test_add_leave_avgs_with_multiple_leaf_nums_and_column_to_average(self):
+    def test_overwrites(self):
+        """ Test that when a data frame with an existing average column is added,
+        it will overwrite that column with new data """
+        df_start = pd.DataFrame({
+            'Leaf No.': [1, 1, 2, 2, 3, 3],
+            'Total Chlorophyll (µg/cm2)': [10, 20, 30, 40, 50, 60],
+            'Avg Total Chlorophyll (µg/cm2)':
+                [5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
+        })
+        df_end = pd.DataFrame({
+            'Leaf No.': [1, 1, 2, 2, 3, 3],
+            'Total Chlorophyll (µg/cm2)': [10, 20, 30, 40, 50, 60],
+            'Avg Total Chlorophyll (µg/cm2)':
+                [15.0, 15.0, 35.0, 35.0, 55.0, 55.0]
+        })
+        result = fix_outliers.add_leave_averages(df_start)
+
+        # Assert that the result is correct
+        assert result.equals(df_end)
+
+    def test_multiple_leaf_nums_and_column_to_average(self):
         """ Test typical use case for fix_outliers.add_leave_average"""
         # Create a dataframe with multiple Leaf No. and column_to_average columns
         df = pd.DataFrame({
@@ -157,8 +177,56 @@ class TestGaussian(unittest.TestCase):
         self.assertListEqual(results.tolist(), correct_results)
 
 
+class TestRemoveOutliersRecursive(unittest.TestCase):
+    """ test the function remove_outliers_recursive in fix_outliers.py, is same as
+    TestRemoveOutliers but just with remove_outliers changed to remove_outliers_recursive"""
+    def test_basic_remove_1_outlier(self):
+        """ Basic test fix_outliers.add_leave_averages was developed with """
+        df = pd.DataFrame({
+            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5],
+            'Foobar': [0, 1, 2, 1, 2, 3, 3, 3, 120, 0, 1, 2, 0, 1, 2]
+        })
+        df_final_correct = pd.DataFrame({
+            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5],
+            'Foobar': [0, 1, 2, 1, 2, 3, 3, 3, 0, 1, 2, 0, 1, 2],
+            "Avg Foobar": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        }, index=[0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14])
+        results, idx_removed = fix_outliers.remove_outliers_recursive(df, column_name="Foobar")
+        pd.testing.assert_frame_equal(results, df_final_correct)
+        self.assertListEqual(idx_removed, [8])
+
+    def test_basic_remove_2_outlier(self):
+        """ Basic test fix_outliers.add_leave_averages was developed with """
+        df = pd.DataFrame({'SampleNumber': [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5],
+                           'Value': [1, 2, 3, 3, 30, 3, 5, 6, 7, 7, 8, 9, 9, 10, 11]})
+        df_final_correct = pd.DataFrame({
+            'SampleNumber': [1, 1, 1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5],
+            'Value': [1, 2, 3, 3, 3, 5, 6, 7, 7, 8, 9, 9, 10, 11],
+            "Avg Value": [2.0, 2.0, 2.0, 3.0, 3.0, 6.0, 6.0, 6.0,
+                          8.0, 8.0, 8.0, 10.0, 10.0, 10.0]
+        }, index=[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
+        results, idx_removed = fix_outliers.remove_outliers_recursive(df, column_sample_number="SampleNumber",
+                                                                      column_name="Value")
+        pd.testing.assert_frame_equal(results, df_final_correct)
+        self.assertListEqual(idx_removed, [4])
+
+    def test_remove_2_outliers(self):
+        """ Test that the fix_outliers.remove_outliers will remove 2 samples correctly"""
+        df = pd.DataFrame({'SampleNumber': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+                           'Value': [1, 2, 3, 20, 5, 6, 10, 100, 5, 5]})
+        df_final_correct = pd.DataFrame({'SampleNumber': [1, 1, 2, 3, 3, 4, 5, 5],
+                                         'Value': [1, 2, 3, 5, 6, 10, 5, 5],
+                                         "Avg Value": [1.5, 1.5, 3.0, 5.5, 5.5, 10.0, 5.0, 5.0]},
+                                        index=[0, 1, 2, 4, 5, 6, 8, 9])
+        results, idx_removed = fix_outliers.remove_outliers_recursive(df, column_sample_number="SampleNumber",
+                                                                      column_name="Value", sigma_cutoff=2)
+        pd.testing.assert_frame_equal(results, df_final_correct)
+        self.assertListEqual(idx_removed, [7, 3])
+
+
 class TestRemoveOutliers(unittest.TestCase):
-    """ test the function remove_outliers in fix_outliers.py"""
+    """ test the function remove_outliers in fix_outliers.py, is same as
+    TestRemoveOutliersRecursive but just with remove_outliers_recursive changed to remove_outliers"""
     def test_basic_remove_1_outlier(self):
         """ Basic test fix_outliers.add_leave_averages was developed with """
         df = pd.DataFrame({
@@ -186,6 +254,9 @@ class TestRemoveOutliers(unittest.TestCase):
         }, index=[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
         results, idx_removed = fix_outliers.remove_outliers(df, column_sample_number="SampleNumber",
                                                             column_name="Value")
+        print(results)
+        print(idx_removed)
+
         pd.testing.assert_frame_equal(results, df_final_correct)
         self.assertListEqual(idx_removed, [4])
 
@@ -199,6 +270,8 @@ class TestRemoveOutliers(unittest.TestCase):
                                         index=[0, 1, 2, 4, 5, 6, 8, 9])
         results, idx_removed = fix_outliers.remove_outliers(df, column_sample_number="SampleNumber",
                                                             column_name="Value", sigma_cutoff=2)
+        print(results)
+        print(idx_removed)
         pd.testing.assert_frame_equal(results, df_final_correct)
         self.assertListEqual(idx_removed, [7, 3])
 
@@ -225,7 +298,7 @@ class TestRealDataProblems(unittest.TestCase):
                   20: 68.43173233, 21: 82.75260192, 22: 83.41055858, 23: 78.4097569,
                   24: 87.41269954, 25: 70.22698357, 26: 74.62139539, 75: 59.45025111,
                   76: 26.10216217, 77: 62.9294617}})
-        _, idx_removed = fix_outliers.remove_outliers(
+        _, idx_removed = fix_outliers.remove_outliers_recursive(
             select_df, column_name='Total Chlorophyll (µg/cm2)',
             sigma_cutoff=3)
         self.assertListEqual([76, 24], idx_removed)
