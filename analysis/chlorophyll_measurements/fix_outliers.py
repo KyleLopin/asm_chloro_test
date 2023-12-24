@@ -3,8 +3,8 @@
 """
 chlorophyll_analysis.py
 
-This script provides functions for analyzing chlorophyll data, including loading data, removing outliers,
-and adding average values to the dataset.
+This script provides functions for analyzing chlorophyll data, including loading data,
+removing outliers, and adding average values to the dataset.
 
 Dependencies:
 - numpy as np
@@ -13,7 +13,8 @@ Dependencies:
 - get_data.py (local file)
 
 Functions:
-1. `add_leave_averages(_df: pd.DataFrame, column_values_to_average: str = 'Total Chlorophyll (µg/cm2)',
+1. `add_leave_averages(_df: pd.DataFrame,
+                       column_values_to_average: str = 'Total Chlorophyll (µg/cm2)',
                        column_to_groupby: str = "Leaf No.") -> pd.DataFrame`:
    Add a column of average values to a DataFrame, overwriting an existing column if it exists.
 
@@ -23,20 +24,24 @@ Functions:
 3. `remove_outliers_recursive(_df: pd.DataFrame, column_name: str = 'Total Chlorophyll (µg/cm2)',
                               column_sample_number: str = "Leaf No.",
                               sigma_cutoff: float = 3.0) -> tuple[pd.DataFrame, list]`:
-   Remove outliers from individual measurements from their average recursively until all z-scores are below the cutoff.
+   Remove outliers from individual measurements from their average recursively
+   until all z-scores are below the cutoff.
 
 4. `remove_outliers(_df: pd.DataFrame, column_name: str = 'Total Chlorophyll (µg/cm2)',
-                    column_sample_number: str = "Leaf No.", sigma_cutoff: float = 3.0) -> tuple[pd.DataFrame, list]`:
-   Remove outliers from individual measurements based on their average until all z-scores are below the cutoff.
+                    column_sample_number: str = "Leaf No.", sigma_cutoff: float = 3.0
+                    ) -> tuple[pd.DataFrame, list]`:
+   Remove outliers from individual measurements based on their average until
+   all z-scores are below the cutoff.
 
 5. `drop_measurement_w_sample_check(_df: pd.DataFrame, idx_to_remove: int,
                                     sample_number_column: str = "Leaf No.",
                                     required_number_samples: int = 2) -> tuple[pd.DataFrame, list]`:
-   Remove one sample by index from the DataFrame and check that the required number of samples is still present.
+   Remove one sample by index from the DataFrame and check that the required number
+   of samples is still present.
 
 Usage:
-   If executed as a standalone script, it loads chlorophyll data, removes outliers, and prints the removed indices
-   along with the corresponding leaf data.
+   If executed as a standalone script, it loads chlorophyll data, removes outliers,
+   and prints the removed indices along with the corresponding leaf data.
 """
 
 __author__ = "Kyle Vitautas Lopin"
@@ -264,8 +269,8 @@ def remove_outliers(_df: pd.DataFrame,
         else:
             if return_std:
                 return _df, removed_indexes, original_residue_std
-            else:
-                return _df, removed_indexes
+            # else
+            return _df, removed_indexes
 
 
 def drop_measurement_w_sample_check(_df: pd.DataFrame, idx_to_remove: int,
