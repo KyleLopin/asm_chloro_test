@@ -7,6 +7,8 @@ Test the individual functions in the analysis.chlorophyll.fix_outliers.py file
 __author__ = "Kyle Vitautas Lopin"
 
 # standard libraries
+import pathlib
+import sys
 import unittest
 
 # installed libraries
@@ -14,6 +16,9 @@ import numpy as np
 import pandas as pd
 
 # local files
+# test_file_folder = pathlib.Path().absolute().parent.parent / "chlorophyll_measurements"
+# sys.path.append(str(test_file_folder))
+import context
 from analysis.chlorophyll_measurements import fix_outliers
 
 
@@ -205,8 +210,8 @@ class TestRemoveOutliersRecursive(unittest.TestCase):
             "Avg Value": [2.0, 2.0, 2.0, 3.0, 3.0, 6.0, 6.0, 6.0,
                           8.0, 8.0, 8.0, 10.0, 10.0, 10.0]
         }, index=[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
-        results, idx_removed = fix_outliers.remove_outliers_recursive(df, column_sample_number="SampleNumber",
-                                                                      column_name="Value")
+        results, idx_removed = fix_outliers.remove_outliers_recursive(
+            df, column_sample_number="SampleNumber", column_name="Value")
         pd.testing.assert_frame_equal(results, df_final_correct)
         self.assertListEqual(idx_removed, [4])
 
@@ -214,14 +219,14 @@ class TestRemoveOutliersRecursive(unittest.TestCase):
         """ Test that the fix_outliers.remove_outliers will remove 2 samples correctly"""
         df = pd.DataFrame({'SampleNumber': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
                            'Value': [1, 2, 3, 20, 5, 6, 10, 100, 5, 5]})
-        df_final_correct = pd.DataFrame({'SampleNumber': [1, 1, 2, 3, 3, 4, 5, 5],
-                                         'Value': [1, 2, 3, 5, 6, 10, 5, 5],
-                                         "Avg Value": [1.5, 1.5, 3.0, 5.5, 5.5, 10.0, 5.0, 5.0]},
-                                        index=[0, 1, 2, 4, 5, 6, 8, 9])
+        df_final_correct = pd.DataFrame({'SampleNumber': [1, 1, 2, 2, 3, 3, 5, 5],
+                                         'Value': [1, 2, 3, 20, 5, 6, 5, 5],
+                                         "Avg Value": [1.5, 1.5, 11.5, 11.5, 5.5, 5.5, 5.0, 5.0]},
+                                        index=[0, 1, 2, 3, 4, 5, 8, 9])
         results, idx_removed = fix_outliers.remove_outliers_recursive(df, column_sample_number="SampleNumber",
                                                                       column_name="Value", sigma_cutoff=2)
         pd.testing.assert_frame_equal(results, df_final_correct)
-        self.assertListEqual(idx_removed, [7, 3])
+        self.assertListEqual(idx_removed, [6, 7])
 
 
 class TestRemoveOutliers(unittest.TestCase):
@@ -263,17 +268,17 @@ class TestRemoveOutliers(unittest.TestCase):
     def test_remove_2_outliers(self):
         """ Test that the fix_outliers.remove_outliers will remove 2 samples correctly"""
         df = pd.DataFrame({'SampleNumber': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
-                           'Value': [1, 2, 3, 20, 5, 6, 10, 100, 5, 5]})
-        df_final_correct = pd.DataFrame({'SampleNumber': [1, 1, 2, 3, 3, 4, 5, 5],
-                                         'Value': [1, 2, 3, 5, 6, 10, 5, 5],
-                                         "Avg Value": [1.5, 1.5, 3.0, 5.5, 5.5, 10.0, 5.0, 5.0]},
-                                        index=[0, 1, 2, 4, 5, 6, 8, 9])
+                           'Value': [1, 2, 3, 21, 5, 6, 10, 100, 5, 5]})
+        df_final_correct = pd.DataFrame({'SampleNumber': [1, 1, 2, 2, 3, 3, 5, 5],
+                                         'Value': [1, 2, 3, 21, 5, 6, 5, 5],
+                                         "Avg Value": [1.5, 1.5, 12.0, 12.0, 5.5, 5.5, 5.0, 5.0]},
+                                        index=[0, 1, 2, 3, 4, 5, 8, 9])
         results, idx_removed = fix_outliers.remove_outliers(df, column_sample_number="SampleNumber",
                                                             column_name="Value", sigma_cutoff=2)
         print(results)
         print(idx_removed)
         pd.testing.assert_frame_equal(results, df_final_correct)
-        self.assertListEqual(idx_removed, [7, 3])
+        self.assertListEqual(idx_removed, [6, 7])
 
 
 class TestRealDataProblems(unittest.TestCase):
@@ -304,3 +309,33 @@ class TestRealDataProblems(unittest.TestCase):
         self.assertListEqual([76, 24], idx_removed)
 
 
+class TestDropMeasurement(unittest.TestCase):
+    """ test the drop_measurement_w_sample_check function in fix_outliers.py """
+    def test_basic_1_sample(self):
+        """ test it drops 1 sample when there are 3 samples for the leaf number"""
+        df = pd.DataFrame({
+            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5],
+            'Foobar': [0, 1, 2, 1, 2, 3, 3, 3, 120, 0, 1, 2, 0, 1, 2]
+        })
+        df_final_correct = pd.DataFrame({
+            'Leaf No.': [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5],
+            'Foobar': [0, 1, 2, 1, 2, 3, 3, 3, 0, 1, 2, 0, 1, 2],
+        }, index=[0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14])
+        results, idx_removed = fix_outliers.drop_measurement_w_sample_check(df, 8)
+        print(results)
+        pd.testing.assert_frame_equal(results, df_final_correct)
+        self.assertListEqual(idx_removed, [8])
+
+    def test_only_2_samples(self):
+        """ test it drops all the Samples when there is only 2 sample numbers left """
+        df = pd.DataFrame({'SampleNumber': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+                           'Value': [1, 2, 3, 20, 5, 6, 10, 100, 5, 5]})
+        df_final_correct = pd.DataFrame({'SampleNumber': [1, 1, 2, 2, 3, 3, 5, 5],
+                                         'Value': [1, 2, 3, 20, 5, 6, 5, 5]},
+                                        index=[0, 1, 2, 3, 4, 5, 8, 9])
+        results, idx_removed = fix_outliers.drop_measurement_w_sample_check(
+            df, 7, sample_number_column="SampleNumber")
+        print(f"results: {results}")
+        print(f"removed indexes: {idx_removed}")
+        pd.testing.assert_frame_equal(results, df_final_correct)
+        self.assertListEqual(idx_removed, [6, 7])
