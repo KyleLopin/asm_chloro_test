@@ -1,59 +1,56 @@
 # Copyright (c) 2023 Kyle Lopin (Naresuan University) <kylel@nu.ac.th>
 
 """
-Using data where multiple measurements are made and compare how each
-measurement compares to the average and finds the 3-sigma outliers
-and calculates and plots the R2 and histograms of the residues from
-the average for each measurement
+chlorophyll_analysis.py
+
+This script provides functions for analyzing chlorophyll data, including loading data, removing outliers,
+and adding average values to the dataset.
+
+Dependencies:
+- numpy as np
+- pandas as pd
+- scipy.stats.zscore
+- get_data.py (local file)
+
+Functions:
+1. `add_leave_averages(_df: pd.DataFrame, column_values_to_average: str = 'Total Chlorophyll (µg/cm2)',
+                       column_to_groupby: str = "Leaf No.") -> pd.DataFrame`:
+   Add a column of average values to a DataFrame, overwriting an existing column if it exists.
+
+2. `gauss_function(x_line: np.array, height: float, center: float, sigma: float) -> np.array`:
+   Create a Gaussian distribution based on given parameters.
+
+3. `remove_outliers_recursive(_df: pd.DataFrame, column_name: str = 'Total Chlorophyll (µg/cm2)',
+                              column_sample_number: str = "Leaf No.",
+                              sigma_cutoff: float = 3.0) -> tuple[pd.DataFrame, list]`:
+   Remove outliers from individual measurements from their average recursively until all z-scores are below the cutoff.
+
+4. `remove_outliers(_df: pd.DataFrame, column_name: str = 'Total Chlorophyll (µg/cm2)',
+                    column_sample_number: str = "Leaf No.", sigma_cutoff: float = 3.0) -> tuple[pd.DataFrame, list]`:
+   Remove outliers from individual measurements based on their average until all z-scores are below the cutoff.
+
+5. `drop_measurement_w_sample_check(_df: pd.DataFrame, idx_to_remove: int,
+                                    sample_number_column: str = "Leaf No.",
+                                    required_number_samples: int = 2) -> tuple[pd.DataFrame, list]`:
+   Remove one sample by index from the DataFrame and check that the required number of samples is still present.
+
+Usage:
+   If executed as a standalone script, it loads chlorophyll data, removes outliers, and prints the removed indices
+   along with the corresponding leaf data.
 """
 
 __author__ = "Kyle Vitautas Lopin"
 
-# standard libraries
-from pathlib import Path
 
 # installed libraries
-import matplotlib.pyplot as plt
 import numpy as np
-
 import pandas as pd
 from scipy.stats import zscore
 
-
-plt.style.use('bmh')
+# local files
+from get_data import get_data
 
 LEAVE = "Banana"
-
-DATA_FOLDER = Path.cwd().parent.parent / "data" / "chlorophyll_data" / "collected_data"
-print(DATA_FOLDER)
-
-
-def get_data(leaf: str, use_columns: tuple[str] = ("Total Chlorophyll (µg/cm2)",
-                                                   "Spot", "Leaf No.")) -> pd.DataFrame:
-    """ Load csv file with raw chlorophyll data for a set of leaves.
-
-    Find a csv file with the name f"{leaf} Chlorophyll content.csv" in the DATA_FOLDER
-    and get the "Leaf No." and "Total Chlorophyll (µg/cm2)".
-
-    Args:
-        leaf (str): Name of the leave to use, for this project, "Banana", "Jasmine",
-        "Mango", "Rice", or "Sugarcane"
-        use_columns (tuple[str]): Name of the columns to get from the data file to return.
-        Use a tuple to prevent the defaults from mutating.
-
-    Returns:
-        pd.DataFrame: DataFrame of the file contents with the column names passed in.
-
-    """
-    # set the data file path
-    data_file = DATA_FOLDER / f"{leaf} Chlorophyll content.csv"
-    # read the data file, convert the use_columns to list if they are a tuple from defaults
-    _data = pd.read_csv(data_file, usecols=list(use_columns))
-    print(_data.columns)
-    if "Leaf No." in _data.columns:
-        _data = _data.ffill()
-        _data["Leaf No."] = _data["Leaf No."].astype(int)
-    return _data
 
 
 def add_leave_averages(_df: pd.DataFrame,
@@ -191,16 +188,21 @@ def remove_outliers_recursive(_df: pd.DataFrame,
         # outlier in a series can affect the z_score of the other measurements
         print(f"z max: {z_scores.max()}, max idx: {z_scores.idxmax()}")
         if abs(z_scores.max()) > sigma_cutoff:
-            removed_indexes.append(z_scores.idxmax())
-            _df.drop(labels=z_scores.idxmax(), inplace=True)
+            _df, _idx = drop_measurement_w_sample_check(_df, z_scores.idxmax(),
+                                                        sample_number_column=column_sample_number)
+            removed_indexes.extend(_idx)
+            # removed_indexes.append(z_scores.idxmax())
+            # _df.drop(labels=z_scores.idxmax(), inplace=True)
         else:
             return _df, removed_indexes
 
 
 def remove_outliers(_df: pd.DataFrame,
-                              column_name: str = 'Total Chlorophyll (µg/cm2)',
-                              column_sample_number: str = "Leaf No.",
-                              sigma_cutoff: float = 3.0) -> tuple[pd.DataFrame, list]:
+                    column_name: str = 'Total Chlorophyll (µg/cm2)',
+                    column_sample_number: str = "Leaf No.",
+                    sigma_cutoff: float = 3.0, return_std: bool = False,
+                    ) -> (tuple[pd.DataFrame, list] |
+                          tuple[pd.DataFrame, list, float]):
     """ Remove outliers of individual measurements from their average.
 
     Take a DataFrame that has a column with multiple measurements of the same sample and a column
@@ -254,33 +256,49 @@ def remove_outliers(_df: pd.DataFrame,
         else:  # optional but prevent recalculating 2 times the first loop
             z_scores_homemade = residues / original_residue_std
         z_scores_homemade = z_scores_homemade.abs()
-        print(z_scores_homemade.idxmax())
-        print(z_scores_homemade)
         if z_scores_homemade.max() > sigma_cutoff:
-            removed_indexes.append(z_scores_homemade.idxmax())
-            _df.drop(labels=z_scores_homemade.idxmax(), inplace=True)
+            _df, _idx = drop_measurement_w_sample_check(_df, z_scores_homemade.idxmax(),
+                                                        sample_number_column=column_sample_number)
+            removed_indexes.extend(_idx)
+            # _df.drop(labels=z_scores_homemade.idxmax(), inplace=True)
         else:
-            return _df, removed_indexes
+            if return_std:
+                return _df, removed_indexes, original_residue_std
+            else:
+                return _df, removed_indexes
 
 
-def check_atleast_x_measurements_per_leave(_df: pd.DataFrame,
-                                           column_name: str = "Leaf No.",
-                                           required_samples: int = 3,
-                                           ) -> pd.DataFrame:
-    """ Check that every leave has atleast 2 measurements, if less than 2 remove
+def drop_measurement_w_sample_check(_df: pd.DataFrame, idx_to_remove: int,
+                                    sample_number_column: str = "Leaf No.",
+                                    required_number_samples: int = 2) -> tuple[pd.DataFrame, list]:
+    """ Remove 1 sample with the index idx_to_remove from the _df DataFrame and check that
+    a required number of samples are still present.
+
+    After the index is removed the sample_number_column of the removed index is checked if the
+    of samples with the same value in the column_name is less than required_number_samples,
+    after removal, all samples with the same column value will be removed.
 
     Args:
-        _df:
-        column_name:
-        required_samples: 
+        _df (pd.DataFrame): DataFrame to drop a row from
+        idx_to_remove (int): index to remove from the DataFrame
+        sample_number_column (str): name of the column that has the sample names / numbers that
+        group each individual measurements
+        required_number_samples (int): number of individual measurement
 
     Returns:
+        pd.DataFrame: new DataFrame with the samples removed
+        list: list of index / indices removed
 
     """
-    counts = _df[column_name].value_counts()
-    print(_df.shape)
-    print(counts)
-    print(counts[counts < 2])
+    removed_sample_name = _df[sample_number_column][idx_to_remove]
+    _df_of_removed_sample_names = _df[_df[sample_number_column] == removed_sample_name]
+    # calculate number of samples with same name, google says this is the fastest way
+    number_samples = len(_df_of_removed_sample_names.index)
+    if (number_samples-1) >= required_number_samples:  # -1 because will be 1 less after drop
+        return _df.drop([idx_to_remove]), [idx_to_remove]
+    # else remove all samples of same name and get indexes
+    return (_df.drop(_df_of_removed_sample_names.index),
+            list(_df_of_removed_sample_names.index.values))
 
 
 if __name__ == '__main__':
@@ -291,6 +309,8 @@ if __name__ == '__main__':
     print(removed_idx)
     # figure out what leaves are removed to see if 1 leave had 2 outliers that got removed
     print(data.iloc[removed_idx])
-    print(data[data["Leaf No."] == 26])
-    # print(data["Leaf No."].value_counts())
-    check_atleast_2_measurements_per_leave(pruned_df)
+    # for leaves in data removed, print out each and check
+    for idx in removed_idx:
+        leaf_number = data.iloc[idx]["Leaf No."]
+        print(f"leaf {leaf_number} data, index {idx} removed")
+        print(data[data["Leaf No."] == leaf_number])
