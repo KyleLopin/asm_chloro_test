@@ -202,6 +202,13 @@ def remove_outliers_recursive(_df: pd.DataFrame,
             return _df, removed_indexes
 
 
+def calculate_residues(_df: pd.DataFrame,
+                       column_name: str = 'Total Chlorophyll (µg/cm2)') -> pd.Series:
+    values = _df[column_name]
+    average_values = _df[f"Avg {column_name}"]
+    return values - average_values
+
+
 def remove_outliers(_df: pd.DataFrame,
                     column_name: str = 'Total Chlorophyll (µg/cm2)',
                     column_sample_number: str = "Leaf No.",
@@ -248,9 +255,9 @@ def remove_outliers(_df: pd.DataFrame,
         _df = add_leave_averages(_df, column_values_to_average=column_name,
                                  column_to_groupby=column_sample_number)
         # calculate the residues of the column from their average
-        values = _df[column_name]
-        average_values = _df[f"Avg {column_name}"]
-        residues = values - average_values  # type: pd.Series
+        # values = _df[column_name]
+        # average_values = _df[f"Avg {column_name}"]
+        residues = calculate_residues(_df, column_name=column_name)
         # get the z_scores of the indicated column
         if not original_residue_std:
             # get the original standard deviation and check it calculated the z-scores correctly
