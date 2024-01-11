@@ -7,8 +7,6 @@ Test the individual functions in the analysis.chlorophyll.fix_outliers.py file
 __author__ = "Kyle Vitautas Lopin"
 
 # standard libraries
-import pathlib
-import sys
 import unittest
 
 # installed libraries
@@ -16,8 +14,6 @@ import numpy as np
 import pandas as pd
 
 # local files
-# test_file_folder = pathlib.Path().absolute().parent.parent / "chlorophyll_measurements"
-# sys.path.append(str(test_file_folder))
 import context
 from analysis.chlorophyll_measurements import fix_outliers
 
