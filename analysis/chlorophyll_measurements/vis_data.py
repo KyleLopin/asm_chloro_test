@@ -24,6 +24,8 @@ LEAVE = "Banana"
 ALL_LEAVES = tuple(("Banana", "Jasmine", "Mango", "Rice", "Sugarcane"))
 AXIS_LABEL_SIZE = 10
 LEGEND_FONT_SIZE = 9
+AX_TITLE_SIZE = 12
+ANNOTATE_POSITION = (.5, .08)
 
 
 # helper functions
@@ -103,10 +105,6 @@ def get_residue_range(all_leaves: list = ALL_LEAVES) -> float:
         return max_abs_residue
 
 
-def get_r_squared():
-    pass
-
-
 # visualization functions
 def draw_line_between_df_pts(start_df: pd.DataFrame, end_df: pd.DataFrame, _ax: plt.Axes,
                              column_name: str = "Total Chlorophyll (µg/cm2)"):
@@ -143,7 +141,8 @@ def draw_line_between_df_pts(start_df: pd.DataFrame, end_df: pd.DataFrame, _ax: 
 
 def plot_histogram_residues(_df: pd.DataFrame,  ax: plt.Axes = None,
                             column_name: str = "Total Chlorophyll (µg/cm2)",
-                            display_range: float = None):
+                            display_range: float = None,
+                            title: str = ""):
     """ Plot histogram of residuals before and after outlier removal.
 
     This function generates a histogram of the residuals (differences between individual
@@ -163,7 +162,8 @@ def plot_histogram_residues(_df: pd.DataFrame,  ax: plt.Axes = None,
             residuals are calculated.  The column of avera
         display_range (float, optional): The range of the x-axis for the histogram. If None, it
             is automatically determined based on the maximum absolute residual value.
-
+        title (str): Title to display on the graph, if empty string no title will be
+            displayed
 
     Returns:
         None
@@ -185,7 +185,7 @@ def plot_histogram_residues(_df: pd.DataFrame,  ax: plt.Axes = None,
     residues_pruned = fix_outliers.calculate_residues(df_pruned,
                                                       column_name=column_name)
     if display_range is None:
-        display_range = max(max(residues_pruned), abs(min(residues_pruned)))
+        display_range = get_residue_range()
     x_bins = np.linspace(-display_range, display_range, 100)
     n, bins, _ = ax.hist(residues_pruned, bins=x_bins, color='blue', alpha=0.8,
                          label="Final data set")
@@ -201,6 +201,8 @@ def plot_histogram_residues(_df: pd.DataFrame,  ax: plt.Axes = None,
     measurement_unit = f"({column_name.split('(')[1]}"
     print(measurement_unit)
     ax.set_xlabel(f"Measurement Residue {measurement_unit}", size=AXIS_LABEL_SIZE)
+    if title:
+        ax.set_title(title, size=AX_TITLE_SIZE)
 
 
 def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
@@ -267,17 +269,34 @@ def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
 
 def dispaly_r2(original_df: pd.DataFrame, ax: plt.Axes,
                column_name: str):
-    residues = fix_outliers.calculate_residues()
+    residues = fix_outliers.calculate_residues(original_df)
+    print(residues)
+    x_original, y_original = get_x_y(original_df)
+    r2_original = r2_score(x_original, y_original)
+    print(f"original r2:{r2_original}")
+    df_pruned, _ = fix_outliers.remove_outliers(
+        original_df,  sigma_cutoff=3)
+    x_pruned, y_pruned = get_x_y(df_pruned)
+    r2_pruned = r2_score(x_pruned, y_pruned)
+    print(f"pruned r2: {r2_pruned}")
+    r2_string = f"r\u00B2 original = {r2_original:.3f}\n" \
+                f"r\u00B2 final = {r2_pruned:.3f}"
+    ax.annotate(r2_string, ANNOTATE_POSITION, xycoords='axes fraction')
 
 
 def plot_both_leaf_graphs(_df: pd.DataFrame, axes: tuple[plt.Axes, plt.Axes] = None,
                           column_name: str = "Total Chlorophyll (µg/cm2)",
                           max_range: float = None):
+    """ Combine the plot_individual_vs_avg and plot_histogram_residues functions and
+    put them side by side.
+    """
     if axes is None:
         _, axes = plt.subplots(1, 2, figsize=(8, 3.6))
     plot_individual_vs_avg(_df, axes[0], column_name=column_name)
     plot_histogram_residues(_df, axes[1], column_name=column_name,
-                            display_range=max_range)
+                            display_range=max_range,
+                            title="Histogram of residues of measured\n"
+                                  "chlorophyll levels after removing outliers")
 
 
 if __name__ == '__main__':
