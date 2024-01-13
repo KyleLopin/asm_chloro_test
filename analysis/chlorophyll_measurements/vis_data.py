@@ -232,7 +232,10 @@ def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
     if f"Avg {column_name}" not in _df.columns:
         raise KeyError(f"'Avg {column_name}' not in DataFrame, need to have a column with "
                        f"the name 'Avg [column_name]' that holds the averages")
-    # x, y = get_x_y(_df, column_name=column_name)
+
+    # make line for reference at the beginning so it is in the back
+    data_range = [min(_df[column_name]), max(_df[column_name])]
+    ax.plot(data_range, data_range, color='black', linestyle='--')
 
     # get outliers
     df_pruned, outlier_idxs, std = fix_outliers.remove_outliers(
@@ -257,28 +260,38 @@ def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
                lw=1, label="samples of outliers")
     ax.scatter(x_outliers, y_outliers, marker='x', c='red', s=50, alpha=0.7,
                lw=1, label=f"{num_outliers} removed outliers")
-    print(f"std: {std}")
-    print(_df_co_samples_of_outliers.drop(outlier_idxs))
     draw_line_between_df_pts(_df_co_samples_of_outliers.drop(outlier_idxs), df_pruned,
                              ax, column_name=column_name)
     ax.set_xlabel(f"Average {column_name}", size=AXIS_LABEL_SIZE)
     ax.set_ylabel(f"Individual {column_name}", size=AXIS_LABEL_SIZE)
     ax.legend(fontsize=LEGEND_FONT_SIZE)
-    dispaly_r2(_df, ax, column_name)
+    # display r squared for data
+    display_r2(_df, ax)
 
 
-def dispaly_r2(original_df: pd.DataFrame, ax: plt.Axes,
-               column_name: str):
-    residues = fix_outliers.calculate_residues(original_df)
-    print(residues)
+
+def display_r2(original_df: pd.DataFrame, ax: plt.Axes):
+    """ Calculate and display r squared for the data.
+
+    Calculate the r squared for the individual samples versus the sample average measurements
+    for all the data, and the r squared after removing 3 sigma data.  Uses get_x_y to get the
+    data to calculate the r squared from and fix_outliers.remove_outliers to remove the outliers.
+
+    Use constant ANNOTATE_POSITION to change position.
+
+    Args:
+        original_df (pd.DataFrame): DataFrame to calculate r squared from
+        ax (plt.Axes): axes put annotation on
+
+    Returns:
+        None
+    """
     x_original, y_original = get_x_y(original_df)
     r2_original = r2_score(x_original, y_original)
-    print(f"original r2:{r2_original}")
     df_pruned, _ = fix_outliers.remove_outliers(
         original_df,  sigma_cutoff=3)
     x_pruned, y_pruned = get_x_y(df_pruned)
     r2_pruned = r2_score(x_pruned, y_pruned)
-    print(f"pruned r2: {r2_pruned}")
     r2_string = f"r\u00B2 original = {r2_original:.3f}\n" \
                 f"r\u00B2 final = {r2_pruned:.3f}"
     ax.annotate(r2_string, ANNOTATE_POSITION, xycoords='axes fraction')
