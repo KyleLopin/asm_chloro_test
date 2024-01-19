@@ -21,11 +21,14 @@ from get_data import get_data
 
 plt.style.use('bmh')
 LEAVE = "Banana"
-ALL_LEAVES = tuple(("Banana", "Jasmine", "Mango", "Rice", "Sugarcane"))
+ALL_LEAVES = tuple(("Mango", "Banana", "Jasmine", "Rice", "Sugarcane"))
 AXIS_LABEL_SIZE = 10
 LEGEND_FONT_SIZE = 9
 AX_TITLE_SIZE = 12
-ANNOTATE_POSITION = (.5, .08)
+R2_ANNOTATE_POSITION = (.55, .08)
+MAE_ANNOTATE_POSITION = (.05, .8)
+BIN_COUNTS = [0, 10, 20, 30, 40]
+BIN_Y_LIM = [0, 30]
 
 
 # helper functions
@@ -102,7 +105,8 @@ def get_residue_range(all_leaves: list = ALL_LEAVES) -> float:
         pruned_residues = fix_outliers.calculate_residues(df_pruned)
         max_abs_residue = max(pruned_residues.max(), abs(min(pruned_residues)),
                               max_abs_residue)
-        return max_abs_residue
+        print(f"leaf: {leaf} has range {max_abs_residue}")
+    return max_abs_residue
 
 
 # visualization functions
@@ -192,17 +196,21 @@ def plot_histogram_residues(_df: pd.DataFrame,  ax: plt.Axes = None,
     popt, _ = curve_fit(gauss_function, bins[:len(n)], n)
     gauss_fit = gauss_function(x_bins, *popt)
     ax.plot(x_bins, gauss_fit, 'r--')
-    # move axis to right side and add labels
-    ax.yaxis.set_label_position("right")
-    ax.yaxis.tick_right()
+    print(f"max bin value: {max(n)}")  # get max bin count for all samples
+    # move axis to right side and add labels, or not
+    # ax.yaxis.set_label_position("right")
+    # ax.yaxis.tick_right()
+    # set bin counts on y label as integers
+    ax.set(yticks=BIN_COUNTS)
+    ax.set_ylim(BIN_Y_LIM)
     ax.set_ylabel("Bin Counts", size=AXIS_LABEL_SIZE)
     # make xlabel, first get the units used from the column name which
     # should have the units at the end in between ( )'s
     measurement_unit = f"({column_name.split('(')[1]}"
-    print(measurement_unit)
     ax.set_xlabel(f"Measurement Residue {measurement_unit}", size=AXIS_LABEL_SIZE)
     if title:
         ax.set_title(title, size=AX_TITLE_SIZE)
+    display_mea(_df, ax)
 
 
 def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
@@ -233,12 +241,12 @@ def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
         raise KeyError(f"'Avg {column_name}' not in DataFrame, need to have a column with "
                        f"the name 'Avg [column_name]' that holds the averages")
 
-    # make line for reference at the beginning so it is in the back
+    # make line for reference at the beginning, so it is in the back
     data_range = [min(_df[column_name]), max(_df[column_name])]
     ax.plot(data_range, data_range, color='black', linestyle='--')
 
     # get outliers
-    df_pruned, outlier_idxs, std = fix_outliers.remove_outliers(
+    df_pruned, outlier_idxs, _ = fix_outliers.remove_outliers(
         _df, column_name=column_name, column_sample_number="Leaf No.",
         sigma_cutoff=3, return_std=True)
     # put an X on the outliers
@@ -253,23 +261,30 @@ def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
     x_pruned, y_pruned = get_x_y(df_pruned)
     # get number of data points to display in legend
     num_data_pts = len(df_pruned.index)
-    # make legend
+
     ax.scatter(x_pruned, y_pruned, marker='o', c='blue', s=20, alpha=0.7,
-               lw=1, label=f"Final data set:\n{num_data_pts} data points")
+               lw=1, label="Final data set")
     ax.scatter(x_co_samples, y_co_samples, marker='o', c='green', s=20, alpha=0.4,
                lw=1, label="samples of outliers")
     ax.scatter(x_outliers, y_outliers, marker='x', c='red', s=50, alpha=0.7,
-               lw=1, label=f"{num_outliers} removed outliers")
+               lw=1, label="removed outliers")
     draw_line_between_df_pts(_df_co_samples_of_outliers.drop(outlier_idxs), df_pruned,
                              ax, column_name=column_name)
-    ax.set_xlabel(f"Average {column_name}", size=AXIS_LABEL_SIZE)
-    ax.set_ylabel(f"Individual {column_name}", size=AXIS_LABEL_SIZE)
-    ax.legend(fontsize=LEGEND_FONT_SIZE)
+    # uncomment for single use, take out to make the last big figure
+    # ax.scatter(x_pruned, y_pruned, marker='o', c='blue', s=20, alpha=0.7,
+    #            lw=1, label=f"Final data set:\n{num_data_pts} data points")
+    # ax.scatter(x_co_samples, y_co_samples, marker='o', c='green', s=20, alpha=0.4,
+    #            lw=1, label="samples of outliers")
+    # ax.scatter(x_outliers, y_outliers, marker='x', c='red', s=50, alpha=0.7,
+    #            lw=1, label=f"{num_outliers} removed outliers")
+    # ax.set_xlabel(f"Average {column_name}", size=AXIS_LABEL_SIZE)
+    # ax.set_ylabel(f"Individual {column_name}", size=AXIS_LABEL_SIZE)
+    # ax.legend(fontsize=LEGEND_FONT_SIZE, frameon=False)
     # display r squared for data
     display_r2(_df, ax)
 
 
-
+# helper function to display annotations on the graphs
 def display_r2(original_df: pd.DataFrame, ax: plt.Axes):
     """ Calculate and display r squared for the data.
 
@@ -277,7 +292,7 @@ def display_r2(original_df: pd.DataFrame, ax: plt.Axes):
     for all the data, and the r squared after removing 3 sigma data.  Uses get_x_y to get the
     data to calculate the r squared from and fix_outliers.remove_outliers to remove the outliers.
 
-    Use constant ANNOTATE_POSITION to change position.
+    Use constant R2_ANNOTATE_POSITION to change position.
 
     Args:
         original_df (pd.DataFrame): DataFrame to calculate r squared from
@@ -294,7 +309,30 @@ def display_r2(original_df: pd.DataFrame, ax: plt.Axes):
     r2_pruned = r2_score(x_pruned, y_pruned)
     r2_string = f"r\u00B2 original = {r2_original:.3f}\n" \
                 f"r\u00B2 final = {r2_pruned:.3f}"
-    ax.annotate(r2_string, ANNOTATE_POSITION, xycoords='axes fraction')
+    ax.annotate(r2_string, R2_ANNOTATE_POSITION, xycoords='axes fraction')
+
+
+def display_mea(original_df: pd.DataFrame, ax:plt.Axes):
+    """ Display the mean absolute error on the graph.
+    A lot of copy and paste from display_r2, but whatever
+    Use constant R2_ANNOTATE_POSITION to change position.
+
+    Args:
+        original_df (pd.DataFrame): DataFrame to calculate r squared from
+        ax (plt.Axes): axes put annotation on
+
+    Returns:
+        None
+    """
+    x_original, y_original = get_x_y(original_df)
+    mae_original = mean_absolute_error(x_original, y_original)
+    df_pruned, _ = fix_outliers.remove_outliers(
+        original_df, sigma_cutoff=3)
+    x_pruned, y_pruned = get_x_y(df_pruned)
+    mae_pruned = mean_absolute_error(x_pruned, y_pruned)
+    mae_string = f"MAE original = {mae_original:.3f}\n" \
+                 f"MAE final = {mae_pruned:.3f}"
+    ax.annotate(mae_string, MAE_ANNOTATE_POSITION, xycoords='axes fraction')
 
 
 def plot_both_leaf_graphs(_df: pd.DataFrame, axes: tuple[plt.Axes, plt.Axes] = None,
@@ -312,14 +350,51 @@ def plot_both_leaf_graphs(_df: pd.DataFrame, axes: tuple[plt.Axes, plt.Axes] = N
                                   "chlorophyll levels after removing outliers")
 
 
-if __name__ == '__main__':
+def plot_all_leaves():
     residue_range = get_residue_range()
-    print(residue_range)
-    data = get_data(LEAVE)
-    print(data)
-    data = fix_outliers.add_leave_averages(data)
-    print(data)
+    _, axes = plt.subplots(5, 2, figsize=(7.5, 10))
+    print(axes)
+    max_residue_range = get_residue_range()
+    print(f"max range: {max_residue_range}")
+
+    for row, leaf in enumerate(ALL_LEAVES):
+        data = get_data(leaf)  # get the data
+        data = fix_outliers.add_leave_averages(data)  # and the average column
+        plot_individual_vs_avg(data, axes[row][0])  # plot the individual vs average plots
+        # plot histograms
+
+        if row == 0:  # add a title to the first graph
+            plot_histogram_residues(data, axes[row][1],
+                                    display_range=max_residue_range,
+                                    title="Histogram of residues of measured  \n"
+                                          "chlorophyll levels after removing outliers  ")
+        else:
+            plot_histogram_residues(data, axes[row][1],
+                                    display_range=max_residue_range)
+
+    # ==== CONFIGURE LEFT GRAPHS =========
+    # put legend on only the top graph,
+    # mango is the best one to use as it has not points in the area
+    axes[0][0].legend(fontsize=LEGEND_FONT_SIZE, frameon=False,
+                      loc='upper left')
+    # set y-label only on the middle graph
+    axes[2][0].set_ylabel("Individual Total Chlorophyll (µg/cm2)", size=AXIS_LABEL_SIZE)
+    # put the x-label on the bottom
+    axes[4][0].set_xlabel("Average Total Chlorophyll (µg/cm2)", size=AXIS_LABEL_SIZE)
+
+
+
+if __name__ == '__main__':
+    # residue_range = get_residue_range()
+    # print(residue_range)
+    # data = get_data(LEAVE)
+    # print(data)
+    # data = fix_outliers.add_leave_averages(data)
+    # print(data)
     # plot_individual_vs_avg(data)
     # plot_histogram_residues(data, range=residue_range)
-    plot_both_leaf_graphs(data, max_range=residue_range)
-    plt.show()
+    # plot_both_leaf_graphs(data, max_range=residue_range)
+    plot_all_leaves()
+    plt.tight_layout()
+    # plt.show()
+    plt.savefig("chlorophyll_r2.svg")
