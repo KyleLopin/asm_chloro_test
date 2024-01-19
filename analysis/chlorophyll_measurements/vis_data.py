@@ -8,7 +8,6 @@ __author__ = "Kyle Vitautas Lopin"
 
 
 # installed libraries
-from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -27,8 +26,9 @@ LEGEND_FONT_SIZE = 9
 AX_TITLE_SIZE = 12
 R2_ANNOTATE_POSITION = (.55, .08)
 MAE_ANNOTATE_POSITION = (.05, .8)
+FIGURE_LABEL_ANNOTATE_POSITION = (0, 1.05)
 BIN_COUNTS = [0, 10, 20, 30, 40]
-BIN_Y_LIM = [0, 30]
+BIN_Y_LIM = [0, 45]
 
 
 # helper functions
@@ -105,7 +105,7 @@ def get_residue_range(all_leaves: list = ALL_LEAVES) -> float:
         pruned_residues = fix_outliers.calculate_residues(df_pruned)
         max_abs_residue = max(pruned_residues.max(), abs(min(pruned_residues)),
                               max_abs_residue)
-        print(f"leaf: {leaf} has range {max_abs_residue}")
+        # print(f"leaf: {leaf} has range {max_abs_residue}")
     return max_abs_residue
 
 
@@ -203,18 +203,19 @@ def plot_histogram_residues(_df: pd.DataFrame,  ax: plt.Axes = None,
     # set bin counts on y label as integers
     ax.set(yticks=BIN_COUNTS)
     ax.set_ylim(BIN_Y_LIM)
-    ax.set_ylabel("Bin Counts", size=AXIS_LABEL_SIZE)
+    # ax.set_ylabel("Bin Counts", size=AXIS_LABEL_SIZE)
     # make xlabel, first get the units used from the column name which
     # should have the units at the end in between ( )'s
-    measurement_unit = f"({column_name.split('(')[1]}"
-    ax.set_xlabel(f"Measurement Residue {measurement_unit}", size=AXIS_LABEL_SIZE)
+    # measurement_unit = f"({column_name.split('(')[1]}"
+    # ax.set_xlabel(f"Measurement Residue {measurement_unit}", size=AXIS_LABEL_SIZE)
     if title:
         ax.set_title(title, size=AX_TITLE_SIZE)
     display_mea(_df, ax)
 
 
 def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
-                           column_name: str = "Total Chlorophyll (µg/cm2)"):
+                           column_name: str = "Total Chlorophyll (µg/cm2)",
+                           title: str = ""):
     """  Scatter plot the individual measurements versus the average measurements of samples
 
     To view the relationship between individual measurements and the averages of the measurements,
@@ -228,6 +229,8 @@ def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
         ax (Optional[plt.Axes]): Matplotlib Axes on which the plot will be displayed.
                                  If None, a new subplot will be created. Defaults to None.
         column_name (str): Name of the column containing individual measurements.
+        title (str): Title to display on the graph, if empty string no title will be
+            displayed.
 
     Returns:
         None
@@ -251,7 +254,6 @@ def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
         sigma_cutoff=3, return_std=True)
     # put an X on the outliers
     x_outliers, y_outliers = get_x_y(_df.loc[outlier_idxs])
-    num_outliers = len(outlier_idxs)
     # get outlier sample numbers
     outlier_numbers = _df.loc[outlier_idxs]["Leaf No."].unique()
     # get the samples that are with the outliers
@@ -259,8 +261,8 @@ def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
     # and the samples x, y coords
     x_co_samples, y_co_samples = get_x_y(_df_co_samples_of_outliers)
     x_pruned, y_pruned = get_x_y(df_pruned)
-    # get number of data points to display in legend
-    num_data_pts = len(df_pruned.index)
+    # get number of data points to display in legend if used
+    # num_data_pts = len(df_pruned.index)
 
     ax.scatter(x_pruned, y_pruned, marker='o', c='blue', s=20, alpha=0.7,
                lw=1, label="Final data set")
@@ -282,6 +284,10 @@ def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
     # ax.legend(fontsize=LEGEND_FONT_SIZE, frameon=False)
     # display r squared for data
     display_r2(_df, ax)
+    if title:  # display title if one is given
+        # put the title on the right side
+        ax.set_title(title, size=AX_TITLE_SIZE, loc='right',
+                     fontweight='bold')
 
 
 # helper function to display annotations on the graphs
@@ -312,7 +318,7 @@ def display_r2(original_df: pd.DataFrame, ax: plt.Axes):
     ax.annotate(r2_string, R2_ANNOTATE_POSITION, xycoords='axes fraction')
 
 
-def display_mea(original_df: pd.DataFrame, ax:plt.Axes):
+def display_mea(original_df: pd.DataFrame, ax: plt.Axes):
     """ Display the mean absolute error on the graph.
     A lot of copy and paste from display_r2, but whatever
     Use constant R2_ANNOTATE_POSITION to change position.
@@ -330,8 +336,8 @@ def display_mea(original_df: pd.DataFrame, ax:plt.Axes):
         original_df, sigma_cutoff=3)
     x_pruned, y_pruned = get_x_y(df_pruned)
     mae_pruned = mean_absolute_error(x_pruned, y_pruned)
-    mae_string = f"MAE original = {mae_original:.3f}\n" \
-                 f"MAE final = {mae_pruned:.3f}"
+    mae_string = f"MAE original = {mae_original:.2f}\n" \
+                 f"MAE final = {mae_pruned:.2f}"
     ax.annotate(mae_string, MAE_ANNOTATE_POSITION, xycoords='axes fraction')
 
 
@@ -350,22 +356,30 @@ def plot_both_leaf_graphs(_df: pd.DataFrame, axes: tuple[plt.Axes, plt.Axes] = N
                                   "chlorophyll levels after removing outliers")
 
 
-def plot_all_leaves():
-    residue_range = get_residue_range()
+def plot_all_leaves(column_name: str = "Total Chlorophyll (µg/cm2)"):
+    """ Make final figure to show chlorophyll levels"""
     _, axes = plt.subplots(5, 2, figsize=(7.5, 10))
-    print(axes)
     max_residue_range = get_residue_range()
     print(f"max range: {max_residue_range}")
 
     for row, leaf in enumerate(ALL_LEAVES):
         data = get_data(leaf)  # get the data
         data = fix_outliers.add_leave_averages(data)  # and the average column
-        plot_individual_vs_avg(data, axes[row][0])  # plot the individual vs average plots
-        # plot histograms
+        # plot the individual vs average plots
+        plot_individual_vs_avg(data, axes[row][0], column_name=column_name,
+                               title=f"{leaf} leaves")
+        # make figure numbers, i+1 for each row and (a) (b) for columns
+        axes[row][0].annotate(f"{row+1} a)", FIGURE_LABEL_ANNOTATE_POSITION,
+                              xycoords='axes fraction', fontsize=12)
+        if row != 0:  # the histogram title is on the top
+            axes[row][1].annotate("b)", FIGURE_LABEL_ANNOTATE_POSITION,
+                                  xycoords='axes fraction', fontsize=12)
 
+        # plot histograms
         if row == 0:  # add a title to the first graph
             plot_histogram_residues(data, axes[row][1],
                                     display_range=max_residue_range,
+                                    column_name=column_name,
                                     title="Histogram of residues of measured  \n"
                                           "chlorophyll levels after removing outliers  ")
         else:
@@ -379,9 +393,12 @@ def plot_all_leaves():
                       loc='upper left')
     # set y-label only on the middle graph
     axes[2][0].set_ylabel("Individual Total Chlorophyll (µg/cm2)", size=AXIS_LABEL_SIZE)
+    axes[2][0].set_ylabel("Bin Counts", size=AXIS_LABEL_SIZE)
     # put the x-label on the bottom
     axes[4][0].set_xlabel("Average Total Chlorophyll (µg/cm2)", size=AXIS_LABEL_SIZE)
-
+    # put the x-label on the bottom of histogram graphs
+    measurement_unit = f"({column_name.split('(')[1]}"  # get unit being measure for x label
+    axes[4][1].set_xlabel(f"Measurement Residue {measurement_unit}", size=AXIS_LABEL_SIZE)
 
 
 if __name__ == '__main__':
