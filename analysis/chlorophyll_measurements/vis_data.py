@@ -374,6 +374,7 @@ def plot_all_leaves(column_name: str = "Total Chlorophyll (µg/cm2)"):
     for row, leaf in enumerate(ALL_LEAVES):
         print(f"leaf: {leaf}")
         data = get_data(leaf, use_columns=_use_columns)  # get the data
+        print(f"start shape: {data.shape}")
         # and the average column
         data = fix_outliers.add_leave_averages(data, column_values_to_average=column_name)
         # plot the individual vs average plots
@@ -424,5 +425,5 @@ if __name__ == '__main__':
     # plot_both_leaf_graphs(data, max_range=residue_range)
     plot_all_leaves(column_name='Chlorophyll b (µg/cm2)')
     plt.tight_layout()
-    plt.show()
-    # plt.savefig("chlorophyll_r2_chl_a.svg")
+    # plt.show()
+    plt.savefig("chlorophyll_r2_chl_b.svg")
