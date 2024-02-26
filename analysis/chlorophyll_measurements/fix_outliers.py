@@ -18,7 +18,7 @@ Functions:
                        column_to_groupby: str = "Leaf No.") -> pd.DataFrame`:
    Add a column of average values to a DataFrame, overwriting an existing column if it exists.
 
-2. `gauss_function(x_line: np.array, height: float, center: float, sigma: float) -> np.array`:
+2. `gauss_function(x_line: numpy array, height: float, center: float, sigma: float) -> numpy array`:
    Create a Gaussian distribution based on given parameters.
 
 3. `remove_outliers_recursive(_df: pd.DataFrame, column_name: str = 'Total Chlorophyll (µg/cm2)',
@@ -56,6 +56,8 @@ from scipy.stats import zscore
 from get_data import get_data
 
 LEAVE = "Banana"
+ALL_LEAVES = tuple(("Mango", "Banana", "Jasmine", "Rice", "Sugarcane"))
+pd.set_option('display.max_columns', None)
 
 
 def add_leave_averages(_df: pd.DataFrame,
@@ -107,11 +109,12 @@ def add_leave_averages(_df: pd.DataFrame,
     _new_df[column_to_groupby] = _new_df[column_to_groupby].astype(int)
 
     # average the column_value_to_average by the column_to_groupby value
-    for leaf in _new_df[column_to_groupby].unique():
+    for leaf_num in _new_df[column_to_groupby].unique():
         # print(f"leaf: {leaf}")
-        leaf_avg = _new_df.loc[_new_df[column_to_groupby] == leaf][column_values_to_average].mean()
+        leaf_avg = _new_df.loc[_new_df[column_to_groupby] ==
+                               leaf_num][column_values_to_average].mean()
         # print(leaf_avg)
-        _new_df.loc[_new_df[column_to_groupby] == leaf,
+        _new_df.loc[_new_df[column_to_groupby] == leaf_num,
                     f"Avg {column_values_to_average}"] = leaf_avg
     return _new_df
 
@@ -204,6 +207,21 @@ def remove_outliers_recursive(_df: pd.DataFrame,
 
 def calculate_residues(_df: pd.DataFrame,
                        column_name: str = 'Total Chlorophyll (µg/cm2)') -> pd.Series:
+    """ Calculate the difference between individual measurements and the averages of all
+     the measurements.
+
+     Takes a pandas DataFrame with a column of individual measurements 
+     (in the column - 'column_name') and subtracts the average values 
+     (in the column - f'Avg {column_name}').
+
+    Parameters:
+    _df (pd.DataFrame): The DataFrame containing the data.
+    column_name (str): The name of the column for which residuals are to be calculated. 
+    Defaults to 'Total Chlorophyll (µg/cm2)'.
+
+    Returns:
+    pd.Series: Series containing the residuals (actual values - average values).
+    """
     values = _df[column_name]
     average_values = _df[f"Avg {column_name}"]
     return values - average_values
@@ -228,9 +246,11 @@ def remove_outliers(_df: pd.DataFrame,
         column_name (str): The name of the column of the individual measurements for which
         outliers are to be removed.
         column_sample_number (str): The column used to show which measurements are from the
-         same sample.
+        same sample.
         sigma_cutoff (float, optional): The cutoff value in terms of standard deviations
         for considering data points as outliers. Defaults to 3.
+        return_std (bool, optional): If true, the calculated standard deviations (z-scores)
+        will also be returned.
 
     Returns:
         - pd.DataFrame: The DataFrame with outliers removed after each iteration and a new
@@ -313,16 +333,70 @@ def drop_measurement_w_sample_check(_df: pd.DataFrame, idx_to_remove: int,
             list(_df_of_removed_sample_names.index.values))
 
 
-if __name__ == '__main__':
-    data = get_data(LEAVE)
-    # data = add_leave_averages(data)
-    pruned_df, removed_idx = remove_outliers(data)
+def make_chloro_pruned_and_average_files():
+    """ Summarize all the chlorophyll data files to get the averages for each species in 1 file
 
-    print(removed_idx)
-    # figure out what leaves are removed to see if 1 leave had 2 outliers that got removed
-    print(data.iloc[removed_idx])
-    # for leaves in data removed, print out each and check
-    for idx in removed_idx:
-        leaf_number = data.iloc[idx]["Leaf No."]
-        print(f"leaf {leaf_number} data, index {idx} removed")
-        print(data[data["Leaf No."] == leaf_number])
+    Go through each leaf type and remove the outlier data for each chlorophyll type (total, a,
+    and b), calculate the final averages, save the final dataset (with outliers removed) to a
+    file with the name f"{leaf}_pruned.csv" and all the summarized data in a
+    file named f"{leaf}_summary.csv"
+
+    Returns:
+        None
+    """
+    # make list of columns
+    columns_to_get = ("Total Chlorophyll (µg/cm2)", "Chlorophyll a (µg/cm2)",
+                      "Chlorophyll b (µg/cm2)", "Total Chlorophyll (µg/mg)",
+                      "Chlorophyll a (µg/mg)", "Chlorophyll b (µg/mg)")
+    for leaf in ALL_LEAVES:  # ["Sugarcane"]:
+        # columns_to_get.extend(["Spot", "Leaf No."])
+        data = get_data(leaf, use_columns=columns_to_get+("Spot", "Leaf No."))
+        # and the average column for all the chlorophyll
+        for column in columns_to_get:
+            data = add_leave_averages(data, column_values_to_average=column)
+        _, outlier_idxs, _ = remove_outliers(data, sigma_cutoff=3, return_std=True,
+                                             column_name="Total Chlorophyll (µg/cm2)")
+        _, outlier_idxs2, _ = remove_outliers(data, sigma_cutoff=3, return_std=True,
+                                              column_name="Chlorophyll a (µg/cm2)")
+        _, outlier_idxs3, _ = remove_outliers(data, sigma_cutoff=3, return_std=True,
+                                              column_name="Chlorophyll b (µg/cm2)")
+        outlier_idxs.extend(outlier_idxs2)
+        outlier_idxs.extend(outlier_idxs3)
+        outlier_idxs = sorted(set(outlier_idxs))
+        # remove the data outliers and then re-calculate the averages
+        data = data.drop(outlier_idxs)
+        # re-write the average column for all the chlorophyll
+        for column in columns_to_get:
+            data = add_leave_averages(data, column_values_to_average=column)
+        # check that all the samples have at least 2 measurements
+        print(f"leaf: {leaf}, outliers: {outlier_idxs}, shape: {data.shape}")
+        print(min(data["Leaf No."].value_counts()))
+        filename = f"{leaf}_pruned.csv"
+        data.to_csv(filename)
+        avg_columns = ["Leaf No."]  # keep the Leaf number and average chlorophyll columns
+        for column in data.columns:
+            if 'Avg' in column:
+                avg_columns.append(column)
+        avg_df = data[avg_columns]
+        avg_df = avg_df.drop_duplicates(subset=["Leaf No."], keep='first')
+        print(f"avg dataframe shape: {avg_df.shape}")
+        # print(avg_df[avg_df["Leaf No."] == 9])
+        # print(data[data["Leaf No."] == 9])
+        filename = f"{leaf}_summary.csv"
+        avg_df.to_csv(filename, index=False)
+
+
+if __name__ == '__main__':
+    # data = get_data(LEAVE)
+    # # data = add_leave_averages(data)
+    # pruned_df, removed_idx = remove_outliers(data)
+    #
+    # print(removed_idx)
+    # # figure out what leaves are removed to see if 1 leave had 2 outliers that got removed
+    # print(data.iloc[removed_idx])
+    # # for leaves in data removed, print out each and check
+    # for idx in removed_idx:
+    #     leaf_number = data.iloc[idx]["Leaf No."]
+    #     print(f"leaf {leaf_number} data, index {idx} removed")
+    #     print(data[data["Leaf No."] == leaf_number])
+    make_chloro_pruned_and_average_files()
