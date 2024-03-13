@@ -14,3 +14,4 @@ test_file_folder = pathlib.Path().absolute().parent.parent / "chlorophyll_measur
 sys.path.append(str(test_file_folder))
 # noinspection wrong-import-position
 import analysis.chlorophyll_measurements
+import analysis
