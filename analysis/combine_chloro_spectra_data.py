@@ -59,7 +59,7 @@ if __name__ == '__main__':
 
         # both DataFrames need to have their indexes set to "Leaf No." to join them
         chloro_data.set_index("Leaf No.", inplace=True)
-        # go through each sensor to updata the fiels
+        # go through each sensor to update the fiels
         for sensor in ALL_SENSORS:
             # get spectrum filename and data
             spectrum_filename = SPECTRUM_DATA_FOLDER / f"{leaf}_{sensor}_data.csv"
@@ -70,12 +70,20 @@ if __name__ == '__main__':
             # set index to join correctly
             spectrum_data.set_index("Leaf No.", inplace=True)
             # combine the data
-            combined_data = add_chloro_to_df(chloro_data, spectrum_data)
+            # combined_data = add_chloro_to_df(chloro_data, spectrum_data)
+
             # overwrite file with new data, the originals are saved in a zip
-            combined_data.to_csv(SPECTRUM_DATA_FOLDER / f"{leaf}_{sensor}_data.csv")
+            # combined_data.to_csv(SPECTRUM_DATA_FOLDER / f"{leaf}_{sensor}_data.csv")
 
             # repeat the process for the reflectance data
             reflectance_filename = REFLECTANCE_DATA_FOLDER / f"{leaf}_{sensor}_data.csv"
             reflectance_data = pd.read_csv(reflectance_filename)
-            refl_combinded_data = add_chloro_to_df(chloro_data, reflectance_data)
-            refl_combinded_data.to_csv(REFLECTANCE_DATA_FOLDER / f"{leaf}_{sensor}_data.csv")
+            if "Leaf number" in reflectance_data.columns:
+                reflectance_data = reflectance_data.rename(columns={"Leaf number": "Leaf No."})
+
+            reflectance_data.set_index("Leaf No.", inplace=True)
+            # print(reflectance_data)
+            # print(chloro_data)
+            refl_combined_data = add_chloro_to_df(chloro_data, reflectance_data)
+            print(refl_combined_data)
+            refl_combined_data.to_csv(REFLECTANCE_DATA_FOLDER / f"{leaf}_{sensor}_data.csv")

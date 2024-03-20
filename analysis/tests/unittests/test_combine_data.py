@@ -63,7 +63,7 @@ class TestCombineChloroSpectraData(unittest.TestCase):
         }, index=[1, 1, 2, 2, 3, 3])
         correct_df.index.name = "Leaf No."
         results_df = add_chloro_to_df(chloro_df, b_df,
-                                   add_columns='Total Chlorophyll (µg/cm2)')
+                                      add_columns='Total Chlorophyll (µg/cm2)')
         pd.testing.assert_frame_equal(results_df, correct_df)
 
     def test_add_2_columns(self):
