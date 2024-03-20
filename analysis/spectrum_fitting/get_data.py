@@ -33,9 +33,10 @@ pd.options.display.width = None
 
 
 def get_x_y(sensor: str, leaf: str, measurement_type: str,
-             chloro_columns: str = "all", int_time: int = 150,
-             led: str = "White LED", led_current: str = "12.5 mA"
-             ) -> tuple[pd.DataFrame, pd.DataFrame]:
+            chloro_columns: str = "all", int_time: int = 150,
+            led: str = "White LED", led_current: str = "12.5 mA",
+            mean: bool = False
+            ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """ Get the data for a sensor leaf combination.
 
     Get a data set based on the leaf, sensor, which type (raw data counts or reflectance)
@@ -52,19 +53,13 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
         int_time (int): Integration time for the sensor read
         led (str): LED used to measure
         led_current (str): Current of the LED used in the measurement
+        mean (bool): If the leaf measurements should be averaged
 
     Returns:
         - pd.DataFrame: DataFrame of the spectra channels for the given conditions
         - pd.DataFrame: targets for fitting the spectrum, different chlorophyll measurements
 
     """
-
-    if measurement_type == "raw":
-        data_path = RAW_SPECTRUM_FOLDER
-    elif measurement_type == "reflectance":
-        data_path = REFLECTANCE_SPECTRUM_FOLDER
-    else:
-        raise ValueError(f"type argument must be 'raw' or 'reflectance, {type} is not value")
     if leaf not in ALL_LEAVES:
         raise ValueError(f"leaf '{leaf}' is not valid, must be one of these: {ALL_LEAVES}")
     if sensor not in ALL_SENSORS:
@@ -79,9 +74,9 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
         raise ValueError(f"chloro_columns '{chloro_columns}' is not valid, must be:"
                          f"'all', 'area', or 'weight'")
 
-    filename = data_path / f"{leaf}_{sensor}_data.csv"
-    # print(filename)
-    data = pd.read_csv(filename)
+    data = get_data(sensor=sensor, leaf=leaf,
+                    measurement_type=measurement_type)
+
     # error check the integration time, led, and led current are in the data set
     # and get only the data with those values
     if int_time not in data["integration time"].unique():
@@ -98,6 +93,8 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
         raise ValueError(f"'{led_current}' is not a valid led, valid values are:"
                          f"{data['led current'].unique()}")
     data = data[data["led current"] == led_current]
+    if mean:
+        data = data.groupby("Leaf No.")
 
     x_columns = []
     for column in data.columns:
@@ -107,8 +104,9 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
     return data[x_columns], data[chloro_columns]
 
 
-@lru_cache()
-def get_data(sensor: str, leaf: str, measurement_type: str) -> pd.DataFrame:
+@lru_cache()  # cache the data reads, helps make tests much shorter
+def get_data(sensor: str, leaf: str, measurement_type: str,
+             mean: bool = False) -> pd.DataFrame:
     """ Get the data for a sensor, leaf, measurement type combination.
 
     Args:
@@ -117,9 +115,10 @@ def get_data(sensor: str, leaf: str, measurement_type: str) -> pd.DataFrame:
         "jasmine", "rice", "sugarcane"
         measurement_type (str):  Which type of data to get "raw" for data counts or
         "reflectance" for reflectance values
+        mean (bool): If the leaf measurements should be averaged
 
     Returns:
-        pd.DataFrame: DataFrame of all data for the given sensor, leaf and measuremnet type.
+        pd.DataFrame: DataFrame of all data for the given sensor, leaf and measurement type.
 
     """
     if measurement_type == "raw":
@@ -131,6 +130,9 @@ def get_data(sensor: str, leaf: str, measurement_type: str) -> pd.DataFrame:
                          f"'{measurement_type}' is not value")
     filename = data_path / f"{leaf}_{sensor}_data.csv"
     data = pd.read_csv(filename)
+    if mean:
+        data = data.groupby(["Leaf No.", "integration time",
+                             "led", "led current"])
     return data
 
 
