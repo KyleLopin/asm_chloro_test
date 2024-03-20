@@ -52,7 +52,8 @@ class TestGetData(unittest.TestCase):
                 for leaf in ALL_LEAVES:
                     data = get_data.get_data(sensor=sensor, leaf=leaf,
                                              measurement_type=_type)
-                    print(f"({sensor}, {leaf}, {_type}): {data.shape}")
+                    self.assertTrue(data.shape[0] >= 5999)
+                    self.assertTrue(data.shape[1] <= 20)
 
 
 class TestGetXY(unittest.TestCase):
