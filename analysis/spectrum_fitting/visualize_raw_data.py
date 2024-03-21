@@ -11,7 +11,9 @@ __author__ = "Kyle Vitautas Lopin"
 from pathlib import Path
 
 # installed libraries
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
 
 # local files
 import get_data
@@ -34,6 +36,25 @@ def visualize_raw_data(sensor="as7262", leaf="banana",
                              measurement_type=measurement_type,
                              mean=True)
     print(data)
+    int_time = 100
+    current = "25 mA"
+    data = data[data["integration time"] == int_time]
+    data = data[data["led current"] == current]
+    print(data)
+    x_columns = []
+    for column in data.columns:
+        if 'nm' in column:
+            x_columns.append(column)
+    x_data = data[x_columns]
+    # x_data = x_data.mean()
+    # make color map
+    color_map = mpl.colormaps['YlGn'](np.linspace(data["Avg Total Chlorophyll (µg/cm2)"].min(),
+                                                  data["Avg Total Chlorophyll (µg/cm2)"].max(),
+                                                  data.shape[0]))
+    print(color_map)
+
+    plt.plot(x_data.T)
+    plt.show()
 
 
 if __name__ == '__main__':

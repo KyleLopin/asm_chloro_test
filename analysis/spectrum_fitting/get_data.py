@@ -132,7 +132,8 @@ def get_data(sensor: str, leaf: str, measurement_type: str,
     data = pd.read_csv(filename)
     if mean:
         data = data.groupby(["Leaf No.", "integration time",
-                             "led", "led current"])
+                             "led", "led current"], as_index=False
+                            ).mean(numeric_only=True)
     return data
 
 
