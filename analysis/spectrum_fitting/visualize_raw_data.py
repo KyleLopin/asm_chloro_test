@@ -17,6 +17,9 @@ import numpy as np
 
 # local files
 import get_data
+print(plt.style.available)
+plt.style.use('seaborn-v0_8-dark')
+COLOR_MAP = 'Greens'  # options Greens, YlGn
 
 
 def visualize_raw_data(sensor="as7262", leaf="banana",
@@ -48,12 +51,24 @@ def visualize_raw_data(sensor="as7262", leaf="banana",
     x_data = data[x_columns]
     # x_data = x_data.mean()
     # make color map
-    color_map = mpl.colormaps['YlGn'](np.linspace(data["Avg Total Chlorophyll (µg/cm2)"].min(),
-                                                  data["Avg Total Chlorophyll (µg/cm2)"].max(),
-                                                  data.shape[0]))
+    color_map = mpl.colormaps[COLOR_MAP]
+    color_map = mpl.colors.LinearSegmentedColormap.from_list("", ["palegreen", "darkgreen"])
+
+    colormap_min = data["Avg Total Chlorophyll (µg/cm2)"].min()
+    colormap_max = data["Avg Total Chlorophyll (µg/cm2)"].max()
+    map_norm = mpl.colors.Normalize(vmin=colormap_min,
+                                    vmax=colormap_max)
     print(color_map)
 
-    plt.plot(x_data.T)
+    lines = plt.plot(x_data.T)
+    # set the color of each line according to its chlorophyll level
+    for i, line in enumerate(lines):  # type: int, mpl.lines.Line2D
+        line.set_color(color_map(map_norm(data["Avg Total Chlorophyll (µg/cm2)"]))[i])
+    # scalar_map.set_clim([real_colormap_min, colormap_max])
+    # add color bar to show chlorophyll level colors
+    plt.colorbar(mpl.cm.ScalarMappable(norm=map_norm, cmap=color_map),
+                 orientation="vertical", label="Total Chlorophyll (µg/cm2)",
+                 fraction=0.08)
     plt.show()
 
 
