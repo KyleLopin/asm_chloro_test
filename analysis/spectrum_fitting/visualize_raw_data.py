@@ -24,7 +24,8 @@ COLOR_MAP = 'Greens'  # options Greens, YlGn
 
 def visualize_raw_data(ax: plt.Axes = None, fig: plt.Figure = None,
                        sensor: str = "as7262", leaf: str = "banana",
-                       measurement_type: str = "reflectance"):
+                       measurement_type: str = "reflectance",
+                       led=None):
     """ Make a graph to visualize basic data, use this to test what is best for paper
 
 
@@ -43,6 +44,9 @@ def visualize_raw_data(ax: plt.Axes = None, fig: plt.Figure = None,
                              mean=True)
     int_time = 100
     current = "25 mA"
+    print(data["led"].unique())
+    if led:
+        data = data[data["led"] == led]
     data = data[data["integration time"] == int_time]
     data = data[data["led current"] == current]
     x_columns = []
@@ -78,10 +82,19 @@ def visualize_raw_data(ax: plt.Axes = None, fig: plt.Figure = None,
     #              label="Total Chlorophyll (µg/cm2)", fraction=0.08)
 
 
+def visualize_2_sensor_raw_data():
+    """ Make a graph to visualize the AS7262 and AS7263 raw data.
 
-if __name__ == '__main__':
-    figure, axs = plt.subplots(2, 2,
-                               sharex="col")
+    Make a 2x2 graph with each sensor as a column and the reflectance on the top row
+    and the raw data counts on the bottom row. Shows the mean in black and all the other measurements
+    in a shade of green that correlates to the level of chlorophyll of the leaf measured
+
+    Returns:
+        None, displays the graph, or can be changed to save the image
+
+    """
+    figure, axs = plt.subplots(nrows=2, ncols=2,
+                               sharex="col", figsize=(7.5, 5))
     for i, sensor in enumerate(["as7262", "as7263"]):
         print(f"i = {i}")
         visualize_raw_data(ax=axs[0, i], fig=figure, sensor=sensor)
@@ -94,6 +107,43 @@ if __name__ == '__main__':
         axs[1, i].set_xlabel("Wavelength (nm)")
         axs[1, i].set_ylabel("Counts")
 
+    plt.tight_layout()
+    plt.show()
+
+
+def visualize_3_sensor_raw_data():
+    """ Make a graph to visualize the AS7262, AS7263 and AS7265x raw data.
+
+    Make a 2x3 graph with each sensor as a column and the reflectance on the top row
+    and the raw data counts on the bottom row. Shows the mean in black and all the other measurements
+    in a shade of green that correlates to the level of chlorophyll of the leaf measured
+
+    Returns:
+        None, displays the graph, or can be changed to save the image
+
+    """
+    figure, axs = plt.subplots(nrows=2, ncols=3,
+                               sharex="col", figsize=(7.5, 4))
+    for i, sensor in enumerate(["as7262", "as7263", "as7265x"]):
+        print(f"i = {i}")
+        led = None
+        if sensor == 'as7265x':
+            led = "b'White'"
+        visualize_raw_data(ax=axs[0, i], fig=figure, sensor=sensor, led=led)
+        axs[0, i].set_title(f"{sensor.upper()}\nReflectance")
+        axs[0, i].set_ylabel("% reflectance")
+        visualize_raw_data(ax=axs[1, i], fig=figure,
+                           measurement_type="raw",
+                           sensor=sensor, led=led)
+        axs[1, i].set_title("Raw Measurements")
+        axs[1, i].set_xlabel("Wavelength (nm)")
+        axs[1, i].set_ylabel("Counts")
+
+
 
     plt.tight_layout()
     plt.show()
+
+
+if __name__ == '__main__':
+    visualize_3_sensor_raw_data()
