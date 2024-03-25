@@ -2,7 +2,8 @@
 
 """
 Make functions to visualize data from as7262, as7263 and as7265x color sensor data
-for the chlorophyll data
+for the chlorophyll data.
+The 2 sensor graph needs better spacing still
 """
 
 __author__ = "Kyle Vitautas Lopin"
@@ -17,12 +18,14 @@ import matplotlib.pyplot as plt
 # local files
 import get_data
 plt.style.use('seaborn-v0_8-dark')
-COLOR_MAP = 'Greens'  # options Greens, YlGn
+COLOR_MAP = 'Greens'  # options: Greens, YlGn
 COLOR_MAP_FROM_LIST = ["palegreen", "darkgreen"]
 INT_TIME = 100  # the integration time to display
 CURRENT = "25 mA"  # the current to use in the measurement to display
-COLOR_BAR_AXIS = [.85, .1, 0.05, 0.8]
-SUBPLOT_RIGHT_PAD = 0.86
+COLOR_BAR_AXIS = [.90, .1, 0.02, 0.8]
+SUBPLOT_RIGHT_PAD = 0.87
+WIDTH_PADDING = 0.3
+
 
 # helper functions
 @lru_cache()  # this gets called 5-7 times so just memorize it instead of making a class
@@ -74,7 +77,8 @@ def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
             x_columns.append(column)
             x.append(int(column.split()[0]))
     x_data = data[x_columns]
-
+    if measurement_type == 'raw':  # make the y labels smaller
+        x_data = x_data / 1000
     # make color map
     color_map, map_norm = make_color_map(data["Avg Total Chlorophyll (µg/cm2)"].min(),
                                          data["Avg Total Chlorophyll (µg/cm2)"].max())
@@ -86,11 +90,8 @@ def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
         line.set_color(color_map(map_norm(data["Avg Total Chlorophyll (µg/cm2)"]))[i])
     # make mean line
     ax.plot(x, x_data.mean(), color="black", label="mean")
-    # scalar_map.set_clim([real_colormap_min, colormap_max])
-    # add color bar to show chlorophyll level colors
-    # fig.colorbar(mpl.cm.ScalarMappable(norm=map_norm, cmap=color_map),
-    #              cax=cax, orientation="vertical",
-    #              label="Total Chlorophyll (µg/cm2)", fraction=0.08)
+    # return the ScalarMappable that can be used to make a color bar
+
     return mpl.cm.ScalarMappable(norm=map_norm, cmap=color_map)
 
 
@@ -121,9 +122,10 @@ def visualize_2_sensor_raw_data(save_filename: str = ""):
                                        sensor=sensor)
         axs[1, i].set_title("Raw Measurements")
         axs[1, i].set_xlabel("Wavelength (nm)")
-        axs[1, i].set_ylabel("Counts")
-
-    plt.subplots_adjust(right=SUBPLOT_RIGHT_PAD)
+        axs[1, i].set_ylabel("Counts (1000s)")
+    # adjust the plots to look good
+    plt.subplots_adjust(right=SUBPLOT_RIGHT_PAD,
+                        wspace=WIDTH_PADDING)
     # add the color bar now
     color_bar_axis = figure.add_axes(COLOR_BAR_AXIS)
     figure.colorbar(color_map, cax=color_bar_axis, orientation="vertical",
@@ -163,11 +165,11 @@ def visualize_3_sensor_raw_data(save_filename: str = ""):
                                        sensor=sensor, led=led)
         axs[1, i].set_title("Raw Measurements")
         axs[1, i].set_xlabel("Wavelength (nm)")
-        axs[1, i].set_ylabel("Counts")
-
+        axs[1, i].set_ylabel("Counts (1000s)")
 
     # add the color bar now
-    plt.subplots_adjust(right=SUBPLOT_RIGHT_PAD)
+    plt.subplots_adjust(right=SUBPLOT_RIGHT_PAD,
+                        wspace=WIDTH_PADDING)
     # add the color bar now
     color_bar_axis = figure.add_axes(COLOR_BAR_AXIS)
     figure.colorbar(color_map, cax=color_bar_axis, orientation="vertical",
@@ -176,11 +178,19 @@ def visualize_3_sensor_raw_data(save_filename: str = ""):
         figure.savefig(save_filename)
 
 
+def visualize_as7265x_different_leds(save_filename: str = ""):
+    pass
+
+
 if __name__ == '__main__':
-    # visualize_2_sensor_raw_data(save_filename=
-    # "../../images/draft_spectrum/2_sensors_raw_data.svg")
-    visualize_2_sensor_raw_data()
-    # visualize_3_sensor_raw_data(save_filename=
-    #                             "../../images/draft_spectrum/3_sensors_raw_data.svg")
-    visualize_3_sensor_raw_data()
+
+    if True:
+        visualize_2_sensor_raw_data(save_filename=
+                                    "../../images/draft_spectrum/2_sensors_raw_data.svg")
+
+        visualize_3_sensor_raw_data(save_filename=
+                                    "../../images/draft_spectrum/3_sensors_raw_data.svg")
+    else:
+        visualize_2_sensor_raw_data()
+        visualize_3_sensor_raw_data()
     plt.show()
