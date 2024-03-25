@@ -17,14 +17,20 @@ import matplotlib.pyplot as plt
 
 # local files
 import get_data
-plt.style.use('seaborn-v0_8-dark')
+plt.style.use('seaborn-v0_8')
 COLOR_MAP = 'Greens'  # options: Greens, YlGn
 COLOR_MAP_FROM_LIST = ["palegreen", "darkgreen"]
 INT_TIME = 100  # the integration time to display
 CURRENT = "25 mA"  # the current to use in the measurement to display
 COLOR_BAR_AXIS = [.90, .1, 0.02, 0.8]
+AS7265X_COLOR_BAR_AXIS = [.90, .25, 0.02, 0.5]
 SUBPLOT_RIGHT_PAD = 0.87
 WIDTH_PADDING = 0.3
+REFLECTANCE_YLABEL = "% reflectance"
+RAW_DATA_YLABEL = "Counts (1000s)"
+# REFERENCES
+# AS7265x unique() leds: ["b'IR'", "b'UV IR'", "b'UV'", "b'White IR'",
+# "b'White UV IR'", "b'White UV'", "b'White'"]
 
 
 # helper functions
@@ -64,6 +70,7 @@ def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
     data = get_data.get_data(sensor=sensor, leaf=leaf,
                              measurement_type=measurement_type,
                              mean=True)
+    print(data["led"].unique())
     if led:
         if led not in data["led"].unique():
             raise KeyError(f"The LED: {'led'} not in data, valid LEDs are {data['led'].unique()}")
@@ -107,7 +114,7 @@ def visualize_2_sensor_raw_data(save_filename: str = ""):
         save_filename (str): Name to save the file to, if falsy then no file is saved.
 
     Returns:
-        None, displays the graph, or can be changed to save the image
+        None, displays the graph, or saves the image
 
     """
     figure, axs = plt.subplots(nrows=2, ncols=2,
@@ -116,20 +123,20 @@ def visualize_2_sensor_raw_data(save_filename: str = ""):
         print(f"i = {i}")
         visualize_raw_data(ax=axs[0, i], sensor=sensor)
         axs[0, i].set_title(f"{sensor.upper()}\nReflectance")
-        axs[0, i].set_ylabel("% reflectance")
+        axs[0, i].set_ylabel(REFLECTANCE_YLABEL)
         color_map = visualize_raw_data(ax=axs[1, i],
                                        measurement_type="raw",
                                        sensor=sensor)
         axs[1, i].set_title("Raw Measurements")
         axs[1, i].set_xlabel("Wavelength (nm)")
-        axs[1, i].set_ylabel("Counts (1000s)")
+        axs[1, i].set_ylabel(RAW_DATA_YLABEL)
     # adjust the plots to look good
     plt.subplots_adjust(right=SUBPLOT_RIGHT_PAD,
                         wspace=WIDTH_PADDING)
     # add the color bar now
     color_bar_axis = figure.add_axes(COLOR_BAR_AXIS)
     figure.colorbar(color_map, cax=color_bar_axis, orientation="vertical",
-                    label="Total Chlorophyll (µg/cm2)", fraction=0.08)
+                    label="Total Chlorophyll (µg/cm\u00b2)", fraction=0.08)
     if save_filename:
         figure.savefig(save_filename)
 
@@ -146,7 +153,7 @@ def visualize_3_sensor_raw_data(save_filename: str = ""):
         save_filename (str): Name to save the file to, if falsy then no file is saved.
 
     Returns:
-        None, displays the graph, or can be changed to save the image
+        None, displays the graph, or saves the image
 
     """
     figure, axs = plt.subplots(nrows=2, ncols=3,
@@ -159,13 +166,13 @@ def visualize_3_sensor_raw_data(save_filename: str = ""):
             led = "b'White'"
         visualize_raw_data(ax=axs[0, i], sensor=sensor, led=led)
         axs[0, i].set_title(f"{sensor.upper()}\nReflectance")
-        axs[0, i].set_ylabel("% reflectance")
+        axs[0, i].set_ylabel(REFLECTANCE_YLABEL)
         color_map = visualize_raw_data(ax=axs[1, i],
                                        measurement_type="raw",
                                        sensor=sensor, led=led)
         axs[1, i].set_title("Raw Measurements")
         axs[1, i].set_xlabel("Wavelength (nm)")
-        axs[1, i].set_ylabel("Counts (1000s)")
+        axs[1, i].set_ylabel(RAW_DATA_YLABEL)
 
     # add the color bar now
     plt.subplots_adjust(right=SUBPLOT_RIGHT_PAD,
@@ -173,17 +180,51 @@ def visualize_3_sensor_raw_data(save_filename: str = ""):
     # add the color bar now
     color_bar_axis = figure.add_axes(COLOR_BAR_AXIS)
     figure.colorbar(color_map, cax=color_bar_axis, orientation="vertical",
-                    label="Total Chlorophyll (µg/cm2)", fraction=0.08)
+                    label="Total Chlorophyll (µg/cm\u00b2)", fraction=0.08)
     if save_filename:
         figure.savefig(save_filename)
 
 
-def visualize_as7265x_different_leds(save_filename: str = ""):
-    pass
+def visualize_as7265x_different_leds(leds: list[str], save_filename: str = ""):
+    """ Make a graph to visualize the raw data for a list of LEDS for the AS7265x color sensor
+
+    Args:
+        leds (list[str]): list strings of the LEDS to display, this has to the string used in
+        the data files in the "led" column.
+        save_filename (str): Name to save the file to, if falsy then no file is saved.
+
+    Returns:
+        None, displays the graph, or saves the image
+
+    """
+    figure, axs = plt.subplots(nrows=len(leds), ncols=2,
+                               sharex="col", figsize=(7.5, 2.75*len(leds)))
+    for i, led in enumerate(leds):
+        print(f"i = {i}")
+        visualize_raw_data(ax=axs[i, 0], sensor="as7265x", led=led,
+                           measurement_type="reflectance")
+        axs[i, 0].set_ylabel(REFLECTANCE_YLABEL)
+        # because I didn't fix that led being saved as a byte string earlier
+        # now you have to split the LED string out
+        # axs[i, 0].set_title("  " + led.split("'")[1]+" LED", loc="left", y=1, pad=-14)
+        axs[i, 0].annotate(led.split("'")[1]+" LED", (.08, .85), xycoords='axes fraction')
+        color_map = visualize_raw_data(ax=axs[i, 1], sensor="as7265x", led=led,
+                                       measurement_type="raw")
+        axs[i, 1].set_ylabel(RAW_DATA_YLABEL)
+    # make titles at top of columns
+    axs[0, 0].set_title("Reflectance")
+    axs[0, 1].set_title("Raw data counts")
+
+    # add the color bar now
+    plt.subplots_adjust(right=SUBPLOT_RIGHT_PAD)
+    color_bar_axis = figure.add_axes(AS7265X_COLOR_BAR_AXIS)
+    figure.colorbar(color_map, cax=color_bar_axis, orientation="vertical",
+                    label="Total Chlorophyll (µg/cm\u00b2)", fraction=0.08)
+    if save_filename:
+        figure.savefig(save_filename)
 
 
 if __name__ == '__main__':
-
     if True:
         visualize_2_sensor_raw_data(save_filename=
                                     "../../images/draft_spectrum/2_sensors_raw_data.svg")
@@ -193,4 +234,12 @@ if __name__ == '__main__':
     else:
         visualize_2_sensor_raw_data()
         visualize_3_sensor_raw_data()
+    if True:
+        visualize_as7265x_different_leds(leds=["b'UV'", "b'White'", "b'IR'"], save_filename=
+        "../../images/draft_spectrum/as7265x_raw_data_white_ir_uv.svg")
+        visualize_as7265x_different_leds(leds=["b'UV'", "b'IR'"], save_filename=
+        "../../images/draft_spectrum/as7265x_raw_data_ir_uv.svg")
+    else:
+        visualize_as7265x_different_leds(leds=["b'UV'", "b'White'", "b'IR'"])
+        visualize_as7265x_different_leds(leds=["b'UV'", "b'IR'"])
     plt.show()
