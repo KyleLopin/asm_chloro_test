@@ -38,7 +38,26 @@ RAW_DATA_YLABEL = "Counts (1000s)"
 def make_color_map(color_min: float, color_max: float
                    ) -> tuple[mpl.colors.LinearSegmentedColormap,
                               mpl.colors.Normalize]:
-    """ Make a linear segment color map from a list """
+    """ Make a linear segment color map from a list
+
+    Args:
+        color_min (float): Minimum value for colormap normalization.
+        color_max (float): Maximum value for colormap normalization.
+
+    Returns:
+        tuple: A tuple containing:
+            - mpl.colors.LinearSegmentedColormap: Linear segmented colormap object.
+            - mpl.colors.Normalize: Normalization object for the colormap.
+
+        Examples:
+        >>> data = get_data.get_data()
+        >>> lines = plt.plot(x, y)
+        >>> color_map, map_norm = make_color_map(data["Avg Total Chlorophyll (µg/cm2)"].min(),
+        ...                                      data["Avg Total Chlorophyll (µg/cm2)"].max())
+        >>> for i, line in enumerate(lines):  # type: int, mpl.lines.Line2D
+        ...     line.set_color(color_map(map_norm(data["Avg Total Chlorophyll (µg/cm2)"]))[i])
+
+    """
     color_map = mpl.colors.LinearSegmentedColormap.from_list(
         "", COLOR_MAP_FROM_LIST)
 
