@@ -225,21 +225,21 @@ def visualize_as7265x_different_leds(leds: list[str], save_filename: str = ""):
 
 
 if __name__ == '__main__':
-    if True:
-        visualize_2_sensor_raw_data(save_filename=
-                                    "../../images/draft_spectrum/2_sensors_raw_data.svg")
-
-        visualize_3_sensor_raw_data(save_filename=
-                                    "../../images/draft_spectrum/3_sensors_raw_data.svg")
-    else:
-        visualize_2_sensor_raw_data()
-        visualize_3_sensor_raw_data()
-    if True:
-        visualize_as7265x_different_leds(leds=["b'UV'", "b'White'", "b'IR'"], save_filename=
-        "../../images/draft_spectrum/as7265x_raw_data_white_ir_uv.svg")
-        visualize_as7265x_different_leds(leds=["b'UV'", "b'IR'"], save_filename=
-        "../../images/draft_spectrum/as7265x_raw_data_ir_uv.svg")
-    else:
-        visualize_as7265x_different_leds(leds=["b'UV'", "b'White'", "b'IR'"])
-        visualize_as7265x_different_leds(leds=["b'UV'", "b'IR'"])
+    # if True:
+    #     visualize_2_sensor_raw_data(save_filename=
+    #                                 "../../images/draft_spectrum/2_sensors_raw_data.svg")
+    #
+    #     visualize_3_sensor_raw_data(save_filename=
+    #                                 "../../images/draft_spectrum/3_sensors_raw_data.svg")
+    # else:
+    #     visualize_2_sensor_raw_data()
+    #     visualize_3_sensor_raw_data()
+    # if True:
+    #     visualize_as7265x_different_leds(leds=["b'UV'", "b'White'", "b'IR'"], save_filename=
+    #     "../../images/draft_spectrum/as7265x_raw_data_white_ir_uv.svg")
+    #     visualize_as7265x_different_leds(leds=["b'UV'", "b'IR'"], save_filename=
+    #     "../../images/draft_spectrum/as7265x_raw_data_ir_uv.svg")
+    # else:
+    #     visualize_as7265x_different_leds(leds=["b'UV'", "b'White'", "b'IR'"])
+    #     visualize_as7265x_different_leds(leds=["b'UV'", "b'IR'"])
     plt.show()
