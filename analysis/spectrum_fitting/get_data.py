@@ -159,6 +159,27 @@ def get_options(sensor: str, leaf: str, measurement_type: str
             list(data["led current"].unique()))
 
 
+def get_data_slices(df: pd.DataFrame, selected_column: str,
+                    values: list):
+    """ Take a DataFrame and return a sub-slice with the selected
+    values in the selected columns.
+
+    Just calls .isin method, but this is easier to remember and to test
+
+    Args:
+        df (pd.DataFrame): DataFrame to get slices from
+        selected_column (str): column name to look for the values in
+        values (list): values to select
+
+    Returns:
+        pd.DataFrame: a subset of the DataFrame passed in with the proper rows
+        selected
+
+    """
+    new_df = df.loc[df[selected_column].isin(values)]
+    return new_df
+
+
 if __name__ == '__main__':
     # Test the function works
     # x, y = get_x_y(sensor="as7262", leaf="banana",

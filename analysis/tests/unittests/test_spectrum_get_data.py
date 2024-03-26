@@ -74,3 +74,47 @@ class TestGetXY(unittest.TestCase):
                                 self.assertTrue(x.shape[1] == 6)
                                 self.assertTrue(y.shape[0] >= 299)
                                 self.assertTrue(y.shape[1] == 6)
+
+
+class TestGetDataSlices(unittest.TestCase):
+    def test_simple(self):
+        df = pd.DataFrame({
+            'Leaf No.': [1, 2, 3],
+            'foo': [10, 20, 30],
+            'current': ["1 mA", "2 mA", "3 mA"]
+        })
+        results = get_data.get_data_slices(df, selected_column="current",
+                                           values=["1 mA", "2 mA"])
+        correct_df = df = pd.DataFrame({
+            'Leaf No.': [1, 2],
+            'foo': [10, 20],
+            'current': ["1 mA", "2 mA"]
+        })
+        assert correct_df.equals(results)
+
+    def test_real_data_as7262(self):
+        for _type in ["raw", "reflectance"]:
+            for sensor in ["as7262", "as7263", "as7265x"]:
+                for leaf in ALL_LEAVES:
+                    data = get_data.get_data(sensor=sensor, leaf=leaf,
+                                             measurement_type=_type)
+                    self.each_condition(data, leaf, sensor)
+
+    def each_condition(self, data, leaf, sensor):
+        for led in data["led"].unique():
+            for int_time in data["integration time"].unique():
+                for current in data["led current"].unique():
+                    # print(led, int_time, current)
+                    result = get_data.get_data_slices(data, "led", [led])
+                    result = get_data.get_data_slices(result, "integration time",
+                                                      [int_time])
+                    result = get_data.get_data_slices(result, "led current",
+                                                      [current])
+                    # print(result.shape, (led, int_time, current, leaf, sensor))
+                    if (led, int_time, current, leaf, sensor) == ("White LED", 200, "50 mA", "banana", "as7262"):
+                        self.assertTrue(result.shape == (299, 20))
+                    elif sensor == "as7265x":
+                        if current != "100 mA":
+                            self.assertTrue(result.shape == (300, 32))
+                    else:
+                        self.assertTrue(result.shape == (300, 20))
