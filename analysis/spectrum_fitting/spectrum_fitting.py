@@ -104,7 +104,7 @@ def make_regr_table(**kwargs) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     for name, regressor in regressors.items():
         for leaf in get_data.ALL_LEAVES:
-            for _type in ["reflectance"]:
+            for _type in ["raw"]:
                 x, y = get_data.get_x_y(leaf=leaf, measurement_type=_type,
                                         read_numbers=1, **kwargs)
                 # print(x.shape)
