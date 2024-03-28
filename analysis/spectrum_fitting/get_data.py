@@ -9,11 +9,10 @@ __author__ = "Kyle Vitautas Lopin"
 
 # standard libraries
 from functools import lru_cache
+import inspect  # for debug / testing
 from pathlib import Path
 
 # installed libraries
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 DATA_FOLDER = Path(__file__).parent.parent.parent / "data"
@@ -35,7 +34,7 @@ pd.options.display.width = None
 def get_x_y(sensor: str, leaf: str, measurement_type: str,
             chloro_columns: str = "all", int_time: int = 150,
             led: str = "White LED", led_current: str = "12.5 mA",
-            mean: bool = False
+            mean: bool = False, read_numbers: int = None,
             ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """ Get the data for a sensor leaf combination.
 
@@ -54,12 +53,16 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
         led (str): LED used to measure
         led_current (str): Current of the LED used in the measurement
         mean (bool): If the leaf measurements should be averaged
+        read_numbers (int): If int, will only return the read number given, if none,
+        all reads are returned
 
     Returns:
         - pd.DataFrame: DataFrame of the spectra channels for the given conditions
         - pd.DataFrame: targets for fitting the spectrum, different chlorophyll measurements
 
     """
+    print("get data args: ")
+    print(sensor, leaf, measurement_type, int_time, led, led_current)
     if leaf not in ALL_LEAVES:
         raise ValueError(f"leaf '{leaf}' is not valid, must be one of these: {ALL_LEAVES}")
     if sensor not in ALL_SENSORS:
@@ -95,6 +98,9 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
     data = data[data["led current"] == led_current]
     if mean:
         data = data.groupby("Leaf No.")
+
+    if read_numbers:
+        data = data[data["Read number"] == read_numbers]
 
     x_columns = []
     for column in data.columns:
