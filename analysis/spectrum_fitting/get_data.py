@@ -61,8 +61,8 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
         - pd.DataFrame: targets for fitting the spectrum, different chlorophyll measurements
 
     """
-    print("get data args: ")
-    print(sensor, leaf, measurement_type, int_time, led, led_current)
+    # print("get data args: ")
+    # print(sensor, leaf, measurement_type, int_time, led, led_current)
     if leaf not in ALL_LEAVES:
         raise ValueError(f"leaf '{leaf}' is not valid, must be one of these: {ALL_LEAVES}")
     if sensor not in ALL_SENSORS:
@@ -97,7 +97,7 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
                          f"{data['led current'].unique()}")
     data = data[data["led current"] == led_current]
     if mean:
-        data = data.groupby("Leaf No.")
+        data = data.groupby("Leaf No.").mean(numeric_only=True)
 
     if read_numbers:
         data = data[data["Read number"] == read_numbers]
