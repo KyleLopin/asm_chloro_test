@@ -7,25 +7,20 @@ led, led current, and integration time
 
 __author__ = "Kyle Vitautas Lopin"
 
-# for testing
-import ssl
-ssl._create_default_https_context = ssl._create_unverified_context
-
 # installed libraries
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pingouin as pg
-from scipy.stats import alexandergovern, f_oneway, kruskal, ttest_ind_from_stats, ttest_ind
-import statsmodels.api as sm
-from statsmodels.formula.api import ols
+from scipy.stats import alexandergovern, f_oneway, kruskal, ttest_ind
 MODEL = "linear regression"
 LED_CURRENTS = ["12.5 mA", "25 mA", "50 mA", "100 mA"]
 INT_TIMES = [50, 100, 150, 200, 250]
 ALL_LEAVES = ["mango", "banana", "jasmine", "rice", "sugarcane"]
+plt.style.use("seaborn-v0_8-darkgrid")
 
 
-def read_data(sensor: str = "as7263", score_type="r2",
+def read_data_depr(sensor: str = "as7263", score_type="r2",
               leaf: str = "mango") -> dict:
     """ Get the data from the excel files that have the mean absolute error and
     r2 scores of the sensors and return a dictionary with the scores and labels of
@@ -73,10 +68,14 @@ def anove_test(_df:pd.DataFrame) -> float:
     """ Calculate the one way ANOVA (Analysis of variance) of a DataFrame
 
     Take a DataFrame with different conditions for each column and calculate the
-    one way ANOVA (Analysis of variance) to test if the conditions are statistically different.
+    one way ANOVA (Analysis of variance) to test if the conditions are
+    statistically different.  Also performs the Kruskal-Wallis H-test and the
+    Alexander-Govern approximation tests, which are similiar to ANOVA but
+    do not assume the samples have the same variance, so they will give slightly
+    different p-values than the ANOVA results.
 
     Args:
-        _df (pd.DataFrame): DataFrame to calculate the
+        _df (pd.DataFrame): DataFrame to perform the tests on
 
     Returns:
         float: p-value of the ANOVA test
@@ -87,8 +86,6 @@ def anove_test(_df:pd.DataFrame) -> float:
     # scipy f_oneway function
     for column in _df.columns:
         samples.append(_df[column].to_list())
-    print('+++')
-    print(samples)
     anova_results = f_oneway(*samples)  # pass the list of list as a pointer to unpack
     kruskal_results = kruskal(*samples)
     alexa_results = alexandergovern(*samples)
@@ -97,33 +94,61 @@ def anove_test(_df:pd.DataFrame) -> float:
     return anova_results.pvalue
 
 
-def anova_currents(_df:pd.DataFrame):
+def anova_test_all_currents_grouped(_df:pd.DataFrame):
+    """ Analyze samples from a DataFrame for different LED current levels.
+
+    This function aggregates samples from the DataFrame based on LED current levels
+    and performs statistical analysis including one-way ANOVA, Kruskal-Wallis H test,
+    and Alexander-Govern test. It also identifies the LED current level with the highest
+    mean value and performs pairwise t-tests between the samples.
+
+    Args:
+        _df (pd.DataFrame): The DataFrame containing the samples.
+
+    Returns:
+        None: just prints the results out
+
+    """
     samples = []
     for _ in LED_CURRENTS:
         samples.append([])  # add an empty list for each current
     for column in _df.columns:
-        print(column)
+        # for each column, check the led current used
         for i, led_current in enumerate(LED_CURRENTS):
-            if led_current in column:
+            if led_current in column:  # and add it to the correct list
                 samples[i].extend(_df[column].to_list())
     anova_results = f_oneway(*samples)  # pass the list of list as a pointer to unpack
     kruskal_results = kruskal(*samples)
     alexa_results = alexandergovern(*samples)
-    for sample in samples:
-        print(f"size: {len(sample)}")
     print("current statistics")
     print(anova_results)
     print(kruskal_results)
     print(alexa_results)
     # find best samples
     means = np.mean(np.array(samples), axis=1)
-    print(LED_CURRENTS)
     max_idx = np.argmax(means)
     t_scores = t_tests_from_samples(samples[max_idx], samples)
+    # print the conditions and the scores
+    print(LED_CURRENTS)
     print(t_scores)
 
 
 def anova_int_times(_df:pd.DataFrame):
+    """ Analyze samples from a DataFrame for different integration times.
+
+    This function aggregates samples from the DataFrame based on integration times and
+    performs statistical analysis including one-way ANOVA, Kruskal-Wallis H test,
+    and Alexander-Govern test. It also identifies the integration time with the highest mean
+    value and performs pairwise t-tests between the samples.
+
+    Args:
+        _df (pd.DataFrame): The DataFrame containing the samples.
+
+    Returns:
+        None: just prints the results out
+
+    """
+
     samples = []
     for _ in INT_TIMES:
         samples.append([])  # add an empty list for each current
@@ -140,16 +165,30 @@ def anova_int_times(_df:pd.DataFrame):
     print(alexa_results)
     # find best samples
     means = np.mean(np.array(samples), axis=1)
-    print(LED_CURRENTS)
+    print(INT_TIMES)
     max_idx = np.argmax(means)
     t_scores = t_tests_from_samples(samples[max_idx], samples)
     print(t_scores)
 
 
-def make_pg_anova_table(sensor: str="as7262", score_type: str = "r2"):
-    # make a DataFrame that can be passed into a pingouin anova model
+def make_pg_anova_table(sensor: str="as7262", score_type: str = "r2"
+                        ) -> pd.DataFrame:
+    """ Make a DataFrame that can be passed into a pingouin anova model.
+
+    Read the sensor data from read_data_df function for all leaf types
+    and then format it so that a pingouin model can use it
+
+    sensor (str): sensor metrics to plot, only as7262 and as7263 works currently
+        score_type (str): which metric to use, "mean_error" for the mean absolute errors
+        or "r2" for the r2 scores
+
+    Returns:
+        pd.DataFrame: columns of the different conditions and the cross
+        validated scores.
+
+    """
     final_df = pd.DataFrame()
-    for i, leaf in enumerate(ALL_LEAVES):
+    for leaf in ALL_LEAVES:
         scores_df, _ = read_data_df(sensor=sensor, score_type=score_type,
                                     leaf=leaf)
         scores_df = scores_df.stack(level=0).reset_index()
@@ -161,7 +200,15 @@ def make_pg_anova_table(sensor: str="as7262", score_type: str = "r2"):
     return final_df
 
 
-def test_factorial_anova(_df):
+def test_factorial_anova(_df: pd):
+    """ Run a 2-factor ANOVA test on the sensor
+
+    Args:
+        _df:
+
+    Returns:
+
+    """
     pg_df = make_pg_anova_table(sensor="as7262", score_type="r2")
     model1 = pg.anova(dv='r2', between=['current', 'int time'],
                       data=pg_df, detailed=True)
@@ -169,8 +216,23 @@ def test_factorial_anova(_df):
     print(model1)
 
 
-def read_data_df(sensor: str="as7262", score_type: str = "mean_error",
-                 leaf: str="mango"):
+def read_data_df(sensor: str="as7262", score_type: str = "r2",
+                 leaf: str="mango") -> tuple[pd.DataFrame, pd.DataFrame]:
+    """ Read the cross validation test scores from the saved files and return
+    the means and standard deviations of the linear regression runs.
+
+    Args:
+        sensor (str):
+        score_type (str):
+        leaf (str):
+
+    Returns:
+        pd.DataFrame: DataFrame with test scores with an index of the LED currents used
+        and columns of the integration times
+        pd.DataFrame: DataFrame with standar deviation of the test scores with an
+        index of the LED currents used and columns of the integration times
+
+    """
     # refactor read_data for multi-bar plot
     test_df = pd.DataFrame(index=LED_CURRENTS,
                            columns=pd.Index(INT_TIMES, name=r"R^2"))
@@ -178,13 +240,14 @@ def read_data_df(sensor: str="as7262", score_type: str = "mean_error",
                             columns=pd.Index(INT_TIMES, name=r"R^2"))
     filename = f"{sensor}_{score_type}.xlsx"
     excel_data = pd.ExcelFile(filename)
+    # the files with have sheet names for each integration time and led current
+    # go through all combinations to get them
     for led_current in LED_CURRENTS:
         for int_time in INT_TIMES:
             sheet_name = f"sheet {int_time} msec {led_current}"
             data = excel_data.parse(sheet_name, index_col=0)
-            # print(data)
+            # data is in the form training mean +- training std, test mean += test std
             data_splits = data.loc[leaf, MODEL].replace('\u00b1', ' ').replace(',', ' ').split()
-            # print(data_splits)
             test_df.loc[led_current, int_time] = float(data_splits[2])
             test_err.loc[led_current, int_time] = float(data_splits[3])
     return test_df, test_err
@@ -209,33 +272,9 @@ def t_tests_from_samples(best_sample:list[float],
     """
     p_values = []
     for sample in rest_of_samples:
-        stat, p = ttest_ind(best_sample, sample)
+        _, p = ttest_ind(best_sample, sample)
         p_values.append(p)
     return p_values
-
-
-# def t_tests(test_scores: pd.DataFrame, test_std: pd.DataFrame,
-#             num_obs: int = 10):
-#     # Take 2 dataframes, one with test scores and another with the
-#     # standard deviations of the cross validation test scores.
-#     # find the best test condition, and then run pair wise t-test between
-#     # the best condition and the others
-#     # Find the best condition
-#     max_idx = test_scores.stack().idxmax()
-#     mean1 = test_scores.loc[max_idx]
-#     std1 = test_std.loc[max_idx]
-#     print(mean1, std1)
-#     p_values = []
-#
-#     for _row, _ in test_scores.iterrows():
-#         for column in test_scores.columns:
-#             mean2 = test_scores.loc[_row, column]
-#             std2 = test_std.loc[_row, column]
-#             stat, p = ttest_ind_from_stats(mean1, std1, num_obs,
-#                                            mean2, std2, num_obs)
-#             p_values.append((p, f"{_row} {column}"))
-#     for p in p_values:
-#         print(p)
 
 
 def main_check_best_condition(sensor="as7262", score_type="r2"):
@@ -243,21 +282,24 @@ def main_check_best_condition(sensor="as7262", score_type="r2"):
 
     Args:
         sensor (str): sensor averages to plot, only as7262 and as7263 works currently
+        score_type (str) : which score type to use, r2 or mean_error
 
     Returns:
         None: plots a graph of the best conditions
 
     """
-    summary = pd.DataFrame()  # store all the leafs scores to get the mean and std from
+    # store all the leafs scores to get the mean and std from
+    summary = pd.DataFrame()
+    # summary will have columns with the conditions i.e. 50 msec 12.5 mA and row
+    # for each leaf, but indexed 0, 1, .. 5
     for i, leaf in enumerate(ALL_LEAVES):
         scores_df, _ = read_data_df(sensor=sensor, score_type=score_type,
                                     leaf=leaf)
         for _column in scores_df.columns:
             for row in scores_df.index:
                 summary.loc[i, f"{_column} msec {row}"] = scores_df.loc[row, _column]
-    # summary = read_data_df(sensor=sensor, score_type=score_type)
     anova_p_value = anove_test(summary)
-    # make the mean and standard deviations DataFrames
+    # make the mean and standard deviations DataFrames from summary
     _means = summary.mean()
     _stds = summary.std()
     max_idx = _means.idxmax()
@@ -275,12 +317,19 @@ def main_check_best_condition(sensor="as7262", score_type="r2"):
             means.loc[current, int_time] = _means[f"{int_time} msec {current}"]
             stds.loc[current, int_time] = _stds[f"{int_time} msec {current}"]
 
-    means.plot(kind='bar', yerr=stds)
+    ax = means.plot(kind='bar', yerr=stds)
     for t_test in t_tests:
         print(t_test)
     print(f"ANOVA p value: {anova_p_value}")
-    anova_currents(summary)
+    anova_test_all_currents_grouped(summary)
     anova_int_times(summary)
+    # ax = plt.gca()
+    print(ax.get_facecolor())
+    # ax.set_facecolor([.84, .84, .90, 1.0])
+    # plt.axhline(y=summary[max_idx].mean(), color='white')
+    # ax.set_yticks([summary[max_idx].mean()], minor=True)
+    # ax.yaxis.grid(True, which='minor')
+    print(summary[max_idx].mean())
     plt.show()
 
 
