@@ -277,7 +277,74 @@ def t_tests_from_samples(best_sample:list[float],
     return p_values
 
 
-def main_check_best_condition(sensor="as7262", score_type="r2"):
+def make_summary_df(sensor, score_type) -> pd.DataFrame:
+    """ Make the summary DataFrame with columns for each condition, eg 50 msec 12.5 mA.
+
+    Go through each leaf and use the read_data_df to get the individual cross-validation
+    test scores and put all into one DataFrame.
+
+    Args:
+        sensor (str): sensor averages to plot, only as7262 and as7263 works currently
+        score_type (str) : which score type to use, r2 or mean_error
+
+    Returns:
+        pd.DataFrame: columns have each condition, e.g. 50 msec 12.5 mA, 100 msec 25 mA etc
+        and the rows will be 1, 2, .. for each sample read
+
+    """
+    summary = pd.DataFrame()
+    # summary will have columns with the conditions i.e. 50 msec 12.5 mA and row
+    # for each leaf, but indexed 0, 1, .. 5
+    for i, leaf in enumerate(ALL_LEAVES):
+        scores_df, _ = read_data_df(sensor=sensor, score_type=score_type,
+                                    leaf=leaf)
+        for _column in scores_df.columns:
+            for row in scores_df.index:
+                summary.loc[i, f"{_column} msec {row}"] = scores_df.loc[row, _column]
+    return summary
+
+
+def make_mean_and_stds(summary: pd.DataFrame
+                       ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """ Make the mean and standard deviation DataFrames than can make a bar plot. Also
+    print out the tests results.
+
+    Take a DataFrame with columns of each condition, e.g. 50 msec 12.5 mA and rows of each
+    test cross-validation scores and produces DataFrames of the mean and standar deviations
+    of the data with columns of the integration time (as ints) and rows of the current conditions
+
+    Args:
+        summary (pd.DataFrame): DataFrame with conditions as columns and values
+        of cross-validation test scores
+
+    Returns:
+        pd.DataFrame: DataFrame of means
+        pd.DataFrame: DataFrame of standard deviations
+
+    """
+    _means = summary.mean()
+    _stds = summary.std()
+    max_idx = _means.idxmax()
+    # calculate the p-values from pair-wise t-tests
+    t_tests = []
+    for _column in summary.columns:
+        _, p = ttest_ind(summary[_column], summary[max_idx])
+        t_tests.append([p, _column])
+    # and print the p-values
+    for t_test in t_tests:
+        print(t_test)
+    # make the dataFrame that plot will make correctly with each current grouped together
+    # and the integration times color coded
+    means = pd.DataFrame()
+    stds = pd.DataFrame()
+    for int_time in INT_TIMES:
+        for current in LED_CURRENTS:
+            means.loc[current, int_time] = _means[f"{int_time} msec {current}"]
+            stds.loc[current, int_time] = _stds[f"{int_time} msec {current}"]
+    return means, stds
+
+
+def main_check_best_condition(sensor:str = "as7262", score_type="r2"):
     """ Plot the average of each leafs cross-validation error.
 
     Args:
@@ -289,38 +356,12 @@ def main_check_best_condition(sensor="as7262", score_type="r2"):
 
     """
     # store all the leafs scores to get the mean and std from
-    summary = pd.DataFrame()
-    # summary will have columns with the conditions i.e. 50 msec 12.5 mA and row
-    # for each leaf, but indexed 0, 1, .. 5
-    for i, leaf in enumerate(ALL_LEAVES):
-        scores_df, _ = read_data_df(sensor=sensor, score_type=score_type,
-                                    leaf=leaf)
-        for _column in scores_df.columns:
-            for row in scores_df.index:
-                summary.loc[i, f"{_column} msec {row}"] = scores_df.loc[row, _column]
-    anova_p_value = anove_test(summary)
+    summary = make_summary_df(sensor, score_type)
+    anova_p_values = anove_test(summary)
     # make the mean and standard deviations DataFrames from summary
-    _means = summary.mean()
-    _stds = summary.std()
-    max_idx = _means.idxmax()
-    max_dist = summary[max_idx]
-    t_tests = []
-    for _column in summary.columns:
-        _, p = ttest_ind(summary[_column], max_dist)
-        t_tests.append([p, _column])
-    # make the dataFrame that plot will make correctly with each current grouped together
-    # and the integration times color coded
-    means = pd.DataFrame()
-    stds = pd.DataFrame()
-    for int_time in INT_TIMES:
-        for current in LED_CURRENTS:
-            means.loc[current, int_time] = _means[f"{int_time} msec {current}"]
-            stds.loc[current, int_time] = _stds[f"{int_time} msec {current}"]
-
+    means, stds = make_mean_and_stds(summary)
     ax = means.plot(kind='bar', yerr=stds)
-    for t_test in t_tests:
-        print(t_test)
-    print(f"ANOVA p value: {anova_p_value}")
+    print(f"ANOVA p value: {anova_p_values}")
     anova_test_all_currents_grouped(summary)
     anova_int_times(summary)
     # ax = plt.gca()
@@ -329,7 +370,7 @@ def main_check_best_condition(sensor="as7262", score_type="r2"):
     # plt.axhline(y=summary[max_idx].mean(), color='white')
     # ax.set_yticks([summary[max_idx].mean()], minor=True)
     # ax.yaxis.grid(True, which='minor')
-    print(summary[max_idx].mean())
+    # print(summary[max_idx].mean())
     plt.show()
 
 

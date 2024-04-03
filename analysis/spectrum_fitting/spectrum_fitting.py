@@ -19,6 +19,8 @@ from sklearn.model_selection import cross_validate, GridSearchCV, ShuffleSplit
 
 # local files
 import get_data
+LED_CURRENTS = ["12.5 mA", "25 mA", "50 mA", "100 mA"]
+INT_TIMES = [50, 100, 150, 200, 250]
 
 
 # don't use
@@ -65,7 +67,7 @@ def _get_mean_absolute(regr, cv, **kwargs):  # don't use
             scores['train_score'].mean(), scores['train_score'].std())
 
 
-def make_regr_table(**kwargs) -> tuple[pd.DataFrame, pd.DataFrame]:
+def make_regr_table_multi_methods(**kwargs) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Perform regression analysis and generate tables of Mean Absolute Error (MAE)
     and R-squared (R2) scores. Test the 3 models of LinearRegression, Lasso,
@@ -109,8 +111,6 @@ def make_regr_table(**kwargs) -> tuple[pd.DataFrame, pd.DataFrame]:
                                         read_numbers=1, **kwargs)
                 # print(x.shape)
                 y = y["Avg Total Chlorophyll (µg/cm2)"]
-                regressor.fit(x, y)
-                # print(regressor.score(x, y))
                 scores = cross_validate(regressor, x, y, cv=cross_validator,
                                         return_train_score=True,
                                         scoring=['neg_mean_absolute_error', 'r2'])
@@ -125,6 +125,56 @@ def make_regr_table(**kwargs) -> tuple[pd.DataFrame, pd.DataFrame]:
                     f"{scores['test_r2'].mean():.3f}\u00b1"
                     f"{scores['test_r2'].std():.3f}")
     return mae_table, r2_table
+
+
+def make_linear_regr_anova_tables(sensor: str = "as7262", leaf: str = "mango"
+                                  ) -> pd.DataFrame:
+    """ Make a DataFrame for use in anova or pairwise t-tests to find best conditions.
+
+    Args:
+        sensor (str): which sensor to use, as7262, as7263 or as7265x
+        leaf (str): which leaf to use
+
+    Returns:
+        pd.DataFrame: DataFrame with column headers of different measurement conditions
+        of f"{int_time} msec {led_current}" and the column values are different cross
+        validated test scores
+
+    """
+    df = pd.DataFrame()
+    _regr = LinearRegression()
+    _cv = ShuffleSplit(n_splits=10, test_size=0.25)
+    for int_time in INT_TIMES:
+        for led_current in LED_CURRENTS:
+            x, y = get_data.get_x_y(leaf=leaf, sensor=sensor, int_time=int_time,
+                                    measurement_type="raw", led_current=led_current,
+                                    mean=True)
+            scores = cross_validate(_regr, x, y, cv=_cv,
+                                    scoring='neg_mean_absolute_error')
+            condition = f"{int_time} msec {led_current}"
+            df[condition] = scores['test_score']
+    return df
+
+
+def make_anova_excel_files():
+    """ Generate the Excel files to use for the ANOVA and t-test analysis
+    to find the best conditions.
+
+    This function generates Excel files with the name {sensor}_anova.xlsx for each sensor
+    and each file has a sheet for each fruit.  Each sheet has a head with the integration
+    time / led current conditions tested i.e. "100 msec 12.5 mA" and the rest of the column
+
+
+    Returns:
+        None, writes a file with the name f"{sensor}_anova.xlsx"
+
+    """
+    for sensor in ["as7262", "as7263"]:
+        with pd.ExcelWriter(f"{sensor}_anova.xlsx") as writer:
+            for leaf in get_data.ALL_LEAVES:
+                print(f"{sensor}, {leaf}")
+                anova_df = make_linear_regr_anova_tables(sensor=sensor, leaf=leaf)
+                anova_df.to_excel(writer, sheet_name=f"{leaf}")
 
 
 def make_excel_scoring_files():
@@ -146,11 +196,11 @@ def make_excel_scoring_files():
         with pd.ExcelWriter(f"{sensor}_mean_error.xlsx") as writer_mea:
 
             with pd.ExcelWriter(f"{sensor}_r2.xlsx") as writer_r2:
-                for int_time in [50, 100, 150, 200, 250]:
-                    for led_current in ["12.5 mA", "25 mA", "50 mA", "100 mA"]:
-                        mae, r2 = make_regr_table(sensor=sensor,
-                                                  int_time=int_time,
-                                                  led_current=led_current)
+                for int_time in INT_TIMES:
+                    for led_current in LED_CURRENTS:
+                        mae, r2 = make_regr_table_multi_methods(sensor=sensor,
+                                                                int_time=int_time,
+                                                                led_current=led_current)
                         mae.to_excel(writer_mea, sheet_name=f"sheet {int_time} msec {led_current}")
                         r2.to_excel(writer_r2, sheet_name=f"sheet {int_time} msec {led_current}")
 
@@ -163,4 +213,4 @@ if __name__ == '__main__':
     #                   led_current="25 mA", leaf="banana",
     #                   measurement_type="raw")
     # make_regr_table(sensor="as7262")
-    make_excel_scoring_files()
+    make_anova_excel_files()
