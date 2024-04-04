@@ -129,6 +129,7 @@ def anova_test_all_currents_grouped(_df:pd.DataFrame):
     max_idx = np.argmax(means)
     t_scores = t_tests_from_samples(samples[max_idx], samples)
     # print the conditions and the scores
+    print("LED current t-scores")
     print(LED_CURRENTS)
     print(t_scores)
 
@@ -165,20 +166,22 @@ def anova_int_times(_df:pd.DataFrame):
     print(alexa_results)
     # find best samples
     means = np.mean(np.array(samples), axis=1)
+    print("integration time t-test")
     print(INT_TIMES)
     max_idx = np.argmax(means)
     t_scores = t_tests_from_samples(samples[max_idx], samples)
     print(t_scores)
 
 
-def make_pg_anova_table(sensor: str="as7262", score_type: str = "r2"
+def make_pg_anova_table(sensor: str, score_type: str
                         ) -> pd.DataFrame:
     """ Make a DataFrame that can be passed into a pingouin anova model.
 
     Read the sensor data from read_data_df function for all leaf types
     and then format it so that a pingouin model can use it
 
-    sensor (str): sensor metrics to plot, only as7262 and as7263 works currently
+    Args:
+        sensor (str): sensor metrics to plot, only as7262 and as7263 works currently
         score_type (str): which metric to use, "mean_error" for the mean absolute errors
         or "r2" for the r2 scores
 
@@ -200,19 +203,27 @@ def make_pg_anova_table(sensor: str="as7262", score_type: str = "r2"
     return final_df
 
 
-def test_factorial_anova(_df: pd):
+def test_factorial_anova(sensor: str,
+                         score_type: str):
     """ Run a 2-factor ANOVA test on the sensor
 
-    Args:
-        _df:
+        Args:
+        sensor (str): sensor averages to test
+        score_type (str) : which score type to use, r2 or mean_error
 
     Returns:
 
     """
-    pg_df = make_pg_anova_table(sensor="as7262", score_type="r2")
+    pg_df = make_pg_anova_table(sensor=sensor, score_type=score_type)
     model1 = pg.anova(dv='r2', between=['current', 'int time'],
                       data=pg_df, detailed=True)
     round(model1, 4)
+    print(f"sensor: {sensor}")
+    print(model1)
+    print(type(model1))
+    # correct the p-values
+    _, model1["p-unc"] = pg.multicomp(model1["p-unc"], method='holm')
+    model1 = model1.rename(columns={"p-unc": 'p-corrected'})
     print(model1)
 
 
@@ -344,7 +355,8 @@ def make_mean_and_stds(summary: pd.DataFrame
     return means, stds
 
 
-def main_check_best_condition(sensor:str = "as7262", score_type="r2"):
+def main_check_best_condition(ax: plt.Axes, sensor:str = "as7262",
+                              score_type="r2"):
     """ Plot the average of each leafs cross-validation error.
 
     Args:
@@ -360,20 +372,31 @@ def main_check_best_condition(sensor:str = "as7262", score_type="r2"):
     anova_p_values = anove_test(summary)
     # make the mean and standard deviations DataFrames from summary
     means, stds = make_mean_and_stds(summary)
-    ax = means.plot(kind='bar', yerr=stds)
+    # set width to reduce the space between packs of bars
+    means.plot(kind='bar', yerr=stds, ax=ax, width=0.8)
+    ax.tick_params(axis='x', labelrotation=0)
+    ax.set_title(sensor.upper())
+    print(f"sensor: {sensor}")
     print(f"ANOVA p value: {anova_p_values}")
     anova_test_all_currents_grouped(summary)
     anova_int_times(summary)
-    # ax = plt.gca()
-    print(ax.get_facecolor())
-    # ax.set_facecolor([.84, .84, .90, 1.0])
-    # plt.axhline(y=summary[max_idx].mean(), color='white')
-    # ax.set_yticks([summary[max_idx].mean()], minor=True)
-    # ax.yaxis.grid(True, which='minor')
-    # print(summary[max_idx].mean())
+    test_factorial_anova(sensor, score_type)
+
+
+def make_2_sensor_graphs():
+    figure, axs = plt.subplots(nrows=1, ncols=2, sharey=True,
+                               figsize=(7.5, 4))
+
+    for i, sensor in enumerate(["as7262", "as7263"]):
+        main_check_best_condition(axs[i], sensor=sensor,
+                                  score_type='r2')
+
+    axs[0].get_legend().remove()
+    axs[0].set_ylabel(r"Average test $R^2$ score")
     plt.show()
 
 
 if __name__ == '__main__':
-    main_check_best_condition()
-    test_factorial_anova(1)
+    # main_check_best_condition()
+    # test_factorial_anova(1)
+    make_2_sensor_graphs()

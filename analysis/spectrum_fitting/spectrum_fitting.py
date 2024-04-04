@@ -127,8 +127,8 @@ def make_regr_table_multi_methods(**kwargs) -> tuple[pd.DataFrame, pd.DataFrame]
     return mae_table, r2_table
 
 
-def make_linear_regr_anova_tables(sensor: str = "as7262", leaf: str = "mango"
-                                  ) -> pd.DataFrame:
+def make_linear_regr_anova_tables(sensor: str = "as7262", leaf: str = "mango",
+                                  measurement_type: str = "r2") -> pd.DataFrame:
     """ Make a DataFrame for use in anova or pairwise t-tests to find best conditions.
 
     Args:
@@ -147,7 +147,8 @@ def make_linear_regr_anova_tables(sensor: str = "as7262", leaf: str = "mango"
     for int_time in INT_TIMES:
         for led_current in LED_CURRENTS:
             x, y = get_data.get_x_y(leaf=leaf, sensor=sensor, int_time=int_time,
-                                    measurement_type="raw", led_current=led_current,
+                                    measurement_type=measurement_type,
+                                    led_current=led_current,
                                     mean=True)
             scores = cross_validate(_regr, x, y, cv=_cv,
                                     scoring='neg_mean_absolute_error')
@@ -169,12 +170,14 @@ def make_anova_excel_files():
         None, writes a file with the name f"{sensor}_anova.xlsx"
 
     """
-    for sensor in ["as7262", "as7263"]:
-        with pd.ExcelWriter(f"{sensor}_anova.xlsx") as writer:
-            for leaf in get_data.ALL_LEAVES:
-                print(f"{sensor}, {leaf}")
-                anova_df = make_linear_regr_anova_tables(sensor=sensor, leaf=leaf)
-                anova_df.to_excel(writer, sheet_name=f"{leaf}")
+    for measure_type in ["raw", "reflectance", "absorbance"]:
+        for sensor in ["as7262", "as7263"]:
+            with pd.ExcelWriter(f"{measure_type}/{sensor}_anova.xlsx") as writer:
+                for leaf in get_data.ALL_LEAVES:
+                    print(f"{sensor}, {leaf}")
+                    anova_df = make_linear_regr_anova_tables(sensor=sensor, leaf=leaf)
+                    anova_df.to_excel(writer, sheet_name=f"{leaf}")
+            print("pass through")
 
 
 def make_excel_scoring_files():
