@@ -9,10 +9,11 @@ __author__ = "Kyle Vitautas Lopin"
 
 # standard libraries
 from functools import lru_cache
-import inspect  # for debug / testing
+import math
 from pathlib import Path
 
 # installed libraries
+import numpy as np
 import pandas as pd
 
 DATA_FOLDER = Path(__file__).parent.parent.parent / "data"
@@ -45,8 +46,8 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
         sensor (str): Which sensor to get the data for "as7262", "as7263", or "as7265x"
         leaf (str): Which leaf to get the data for, works for "mango", "banana",
         "jasmine", "rice", "sugarcane"
-        measurement_type (str):  Which type of data to get "raw" for data counts or
-        "reflectance" for reflectance values
+        measurement_type (str):  Which type of data to get "raw" for data counts,
+        "reflectance" for reflectance values, or "absorbance".
         chloro_columns (str):  Which chlorophyll columns to get, will have chlorophyll
         by area or weight. Valid inputs are "all", "area", or "weight"
         int_time (int): Integration time for the sensor read
@@ -61,8 +62,8 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
         - pd.DataFrame: targets for fitting the spectrum, different chlorophyll measurements
 
     """
-    # print("get data args: ")
-    # print(sensor, leaf, measurement_type, int_time, led, led_current)
+    print("get data args: ")
+    print(sensor, leaf, measurement_type, int_time, led, led_current)
     if leaf not in ALL_LEAVES:
         raise ValueError(f"leaf '{leaf}' is not valid, must be one of these: {ALL_LEAVES}")
     if sensor not in ALL_SENSORS:
@@ -107,7 +108,12 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
         if 'nm' in column:
             x_columns.append(column)
     # print(f"x columns: {x_columns}")
-    return data[x_columns], data[chloro_columns]
+    x_data = data[x_columns]
+    if measurement_type == "absorbance":
+        print("taking absorbance")
+        x_data = 1 / x_data
+        x_data = x_data.map(math.log10)
+    return x_data, data[chloro_columns]
 
 
 @lru_cache()  # cache the data reads, helps make tests much shorter
@@ -131,11 +137,14 @@ def get_data(sensor: str, leaf: str, measurement_type: str,
         data_path = RAW_SPECTRUM_FOLDER
     elif measurement_type == "reflectance":
         data_path = REFLECTANCE_SPECTRUM_FOLDER
+    elif measurement_type == "absorbance":
+        data_path = REFLECTANCE_SPECTRUM_FOLDER
     else:
-        raise ValueError(f"type argument must be 'raw' or 'reflectance, "
+        raise ValueError(f"type argument must be 'raw', 'absorbance' or 'reflectance, "
                          f"'{measurement_type}' is not value")
     filename = data_path / f"{leaf}_{sensor}_data.csv"
     data = pd.read_csv(filename)
+
     if mean:
         data = data.groupby(["Leaf No.", "integration time",
                              "led", "led current"], as_index=False

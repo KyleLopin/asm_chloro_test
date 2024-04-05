@@ -13,11 +13,116 @@ import numpy as np
 import pandas as pd
 import pingouin as pg
 from scipy.stats import alexandergovern, f_oneway, kruskal, ttest_ind
-MODEL = "linear regression"
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import cross_validate, ShuffleSplit
+
+# local files
+import get_data
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', None)
+
+MODEL = ("linear regression",  LinearRegression())
+CV = ("ShuffleSplit, 10 splits", ShuffleSplit(n_splits=10))
+
 LED_CURRENTS = ["12.5 mA", "25 mA", "50 mA", "100 mA"]
 INT_TIMES = [50, 100, 150, 200, 250]
 ALL_LEAVES = ["mango", "banana", "jasmine", "rice", "sugarcane"]
 plt.style.use("seaborn-v0_8-darkgrid")
+
+
+def make_files(score_type: str = 'r2') -> None:
+    """ Make files to use for ANOVA tests on the measurement conditions.
+
+    Make Excel files with columns for each integration time and led current
+    combination (ie 100 msec 12.5 mA) with cross-validation test scores, 1 score
+    for each leaf.  For each sensor make an Excel file with sheet names
+    of the measurement modes (raw, reflectance, or absorbance), and a details
+    sheet to save the regression and cross validation splitting methods.
+
+    Args:
+        score_type (str): score type to be used in the cross_validate call.
+        Must be a valid sklearn scoring for regression; see:
+        https://scikit-learn.org/stable/modules/model_evaluation.html
+
+    Returns:
+        None: Makes Excel files
+
+    """
+    # make file for each sensor
+    for sensor in ["as7262", "as7263"]:
+        filename = f"conditions/{sensor}_{score_type}.xlsx"
+        writer = pd.ExcelWriter(filename)
+        # make an Excel sheet for each measurement mode
+        for measurement_mode in ["raw", "reflectance", "absorbance"]:
+            sheet_df = make_scores_df(sensor, measurement_mode, score_type)
+            sheet_df.to_excel(writer, sheet_name=measurement_mode)
+        # add sheet of details
+        details_df = pd.DataFrame({"Regressor": MODEL[0],
+                                   "CV": CV[0]},
+                                  index=[1, 2])
+        details_df.to_excel(writer, sheet_name="details")
+        writer.close()
+
+
+def make_scores_df(sensor: str, measurement_mode: str,
+                   score_type: str) -> pd.DataFrame:
+    """ Make a DataFrame of cross validation scores for each measurement condition.
+
+    Make DataFrame with columns for each integration time and led current
+    combination (ie 100 msec 12.5 mA) with cross-validation test scores for each
+    of the 5 leafs.
+
+    Args:
+        sensor (str): which sensor to score, "as7262", "as7263", not "as7265x" yet
+        measurement_mode (str): which measurement type to use, "raw",
+        "reflectance", or "absorbance"
+        score_type (str): scoring metric to pass to cross_validate
+
+    Returns:
+        pd.DataFrame: DataFrame of columns of conditions and cross-validated
+        tests scores for each leaf.
+
+    """
+    dict_for_df = {}
+    for led_current in LED_CURRENTS:
+        for int_time in INT_TIMES:
+            condition = f"{int_time} msec {led_current}"
+            scores = get_leaf_scores(score_type=score_type, sensor=sensor,
+                                     led_current=led_current, int_time=int_time,
+                                     measurement_type=measurement_mode)
+            dict_for_df[condition] = scores
+    return pd.DataFrame().from_dict(dict_for_df)
+
+
+
+def get_leaf_scores(score_type: str, take_mean=True,
+                    led: str = "White LED",
+                    y_columns: list[str] = ["Avg Total Chlorophyll (µg/cm2)"],
+                    **kwargs) -> list[float]:
+    """ Get all the cross validation test scores for each leaf.
+
+    Args:
+        score_type (str): scoring metric to pass to cross_validate
+        take_mean (bool): If the mean of all reads in the leaf should be taken before fitting
+        led (str): LED data to score
+        y_columns (list[str]): list of what chlorophyll columns to score for
+        **kwargs: arguments that get passed through to the get_data.get_x_y
+
+    Returns:
+        list[float]: mean of the cross-validation test scores
+
+    """
+    scores = []
+    for leaf in ALL_LEAVES:
+        x, y = get_data.get_x_y(led=led, leaf=leaf,
+                                mean=take_mean,
+                                **kwargs)
+        y = y[y_columns]
+        leaf_score = cross_validate(MODEL[1], x, y, cv=CV[1],
+                                    scoring=score_type)
+        scores.append(leaf_score['test_score'].mean())
+    return scores
 
 
 def read_data_depr(sensor: str = "as7263", score_type="r2",
@@ -399,4 +504,5 @@ def make_2_sensor_graphs():
 if __name__ == '__main__':
     # main_check_best_condition()
     # test_factorial_anova(1)
-    make_2_sensor_graphs()
+    # make_2_sensor_graphs()
+    make_files()
