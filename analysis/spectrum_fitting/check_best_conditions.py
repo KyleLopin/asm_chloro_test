@@ -23,7 +23,7 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
 MODEL = ("linear regression",  LinearRegression())
-CV = ("ShuffleSplit, 10 splits", ShuffleSplit(n_splits=10))
+CV = ("ShuffleSplit, 10 splits", ShuffleSplit(n_splits=50))
 
 LED_CURRENTS = ["12.5 mA", "25 mA", "50 mA", "100 mA"]
 INT_TIMES = [50, 100, 150, 200, 250]
@@ -95,8 +95,7 @@ def make_scores_df(sensor: str, measurement_mode: str,
     return pd.DataFrame().from_dict(dict_for_df)
 
 
-
-def get_leaf_scores(score_type: str, take_mean=True,
+def get_leaf_scores(score_type: str, take_mean=False,
                     led: str = "White LED",
                     y_columns: list[str] = ["Avg Total Chlorophyll (µg/cm2)"],
                     **kwargs) -> list[float]:
@@ -117,6 +116,7 @@ def get_leaf_scores(score_type: str, take_mean=True,
     for leaf in ALL_LEAVES:
         x, y = get_data.get_x_y(led=led, leaf=leaf,
                                 mean=take_mean,
+                                read_numbers=1,
                                 **kwargs)
         y = y[y_columns]
         leaf_score = cross_validate(MODEL[1], x, y, cv=CV[1],
@@ -278,8 +278,8 @@ def anova_int_times(_df:pd.DataFrame):
     print(t_scores)
 
 
-def make_pg_anova_table(sensor: str, score_type: str
-                        ) -> pd.DataFrame:
+def make_pg_anova_table(sensor: str, score_type: str,
+                        measurement_type: str = 'raw') -> pd.DataFrame:
     """ Make a DataFrame that can be passed into a pingouin anova model.
 
     Read the sensor data from read_data_df function for all leaf types
@@ -289,23 +289,38 @@ def make_pg_anova_table(sensor: str, score_type: str
         sensor (str): sensor metrics to plot, only as7262 and as7263 works currently
         score_type (str): which metric to use, "mean_error" for the mean absolute errors
         or "r2" for the r2 scores
+        measurement_type (str): which measurement method was used for testing:
+        raw, reflectance, or absorbance
 
     Returns:
         pd.DataFrame: columns of the different conditions and the cross
         validated scores.
 
     """
-    final_df = pd.DataFrame()
-    for leaf in ALL_LEAVES:
-        scores_df, _ = read_data_df(sensor=sensor, score_type=score_type,
-                                    leaf=leaf)
-        scores_df = scores_df.stack(level=0).reset_index()
-        final_df = pd.concat([final_df, scores_df], ignore_index=True)
-    final_df = final_df.rename(columns={"level_0": "current",
-                                        "R^2": "int time",
+    # final_df = pd.DataFrame()
+    # for leaf in ALL_LEAVES:
+    #     scores_df, _ = read_data_df(sensor=sensor, score_type=score_type)
+    #     scores_df = scores_df.stack(level=0).reset_index()
+    #     final_df = pd.concat([final_df, scores_df], ignore_index=True)
+    # final_df = final_df.rename(columns={"level_0": "current",
+    #                                     "R^2": "int time",
+    #                                     0: "r2"})
+    # final_df['r2'] = pd.to_numeric(final_df['r2'])
+    # print(final_df)
+    # get just the means df and ignore the standard deviations df
+    means_df, _ = read_data_df(sensor=sensor, score_type=score_type,
+                               measurement_type=measurement_type)
+    # convert the df so each row has the current in column 0, integration time
+    # in column 1, and score in column 2
+    means_df = means_df.stack(level=0).reset_index()
+    # give the df columns proper names
+    means_df = means_df.rename(columns={"level_0": "current",
+                                        "level_1": "int time",
                                         0: "r2"})
-    final_df['r2'] = pd.to_numeric(final_df['r2'])
-    return final_df
+    print(means_df)
+    means_df['r2'] = pd.to_numeric(means_df['r2'])
+    print(means_df.dtypes)
+    return means_df
 
 
 def test_factorial_anova(sensor: str,
@@ -327,46 +342,48 @@ def test_factorial_anova(sensor: str,
     print(model1)
     print(type(model1))
     # correct the p-values
-    _, model1["p-unc"] = pg.multicomp(model1["p-unc"], method='holm')
-    model1 = model1.rename(columns={"p-unc": 'p-corrected'})
+    if "p-unc" in model1.columns:
+        _, model1["p-unc"] = pg.multicomp(model1["p-unc"], method='holm')
+        model1 = model1.rename(columns={"p-unc": 'p-corrected'})
     print(model1)
 
 
-def read_data_df(sensor: str="as7262", score_type: str = "r2",
-                 leaf: str="mango") -> tuple[pd.DataFrame, pd.DataFrame]:
+def read_data_df(sensor: str = "as7262", score_type: str = "r2",
+                 measurement_type: str = "raw"
+                 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """ Read the cross validation test scores from the saved files and return
     the means and standard deviations of the linear regression runs.
 
     Args:
         sensor (str):
         score_type (str):
-        leaf (str):
+        measurement_type (str): which measurement method was used for testing:
+        raw, reflectance, or absorbance
 
     Returns:
         pd.DataFrame: DataFrame with test scores with an index of the LED currents used
         and columns of the integration times
-        pd.DataFrame: DataFrame with standar deviation of the test scores with an
+        pd.DataFrame: DataFrame with standard deviation of the test scores with an
         index of the LED currents used and columns of the integration times
 
     """
-    # refactor read_data for multi-bar plot
-    test_df = pd.DataFrame(index=LED_CURRENTS,
-                           columns=pd.Index(INT_TIMES, name=r"R^2"))
-    test_err = pd.DataFrame(index=LED_CURRENTS,
-                            columns=pd.Index(INT_TIMES, name=r"R^2"))
-    filename = f"{sensor}_{score_type}.xlsx"
-    excel_data = pd.ExcelFile(filename)
-    # the files with have sheet names for each integration time and led current
-    # go through all combinations to get them
+    # get all the data
+    all_conditions_df = read_conditions_file(sensor=sensor, score_type=score_type,
+                                             measurement_type=measurement_type)
+    # make pd.Series of the means and standard deviations
+    mean_df = all_conditions_df.mean()
+    std_df = all_conditions_df.std()
+    # initialize the DataFrames to fill in
+    test_means = pd.DataFrame()
+    test_errs = pd.DataFrame()
+    # go through each led current and integration time combination and fill in the
+    # test means and test error DataFrames
     for led_current in LED_CURRENTS:
         for int_time in INT_TIMES:
-            sheet_name = f"sheet {int_time} msec {led_current}"
-            data = excel_data.parse(sheet_name, index_col=0)
-            # data is in the form training mean +- training std, test mean += test std
-            data_splits = data.loc[leaf, MODEL].replace('\u00b1', ' ').replace(',', ' ').split()
-            test_df.loc[led_current, int_time] = float(data_splits[2])
-            test_err.loc[led_current, int_time] = float(data_splits[3])
-    return test_df, test_err
+            column = f"{int_time} msec {led_current}"
+            test_means.loc[led_current, int_time] = mean_df[column]
+            test_errs.loc[led_current, int_time] = std_df[column]
+    return test_means, test_errs
 
 
 def t_tests_from_samples(best_sample:list[float],
@@ -393,7 +410,9 @@ def t_tests_from_samples(best_sample:list[float],
     return p_values
 
 
-def make_summary_df(sensor, score_type) -> pd.DataFrame:
+def read_conditions_file(sensor: str, score_type: str,
+                         measurement_type: str
+                         ) -> pd.DataFrame:
     """ Make the summary DataFrame with columns for each condition, eg 50 msec 12.5 mA.
 
     Go through each leaf and use the read_data_df to get the individual cross-validation
@@ -402,22 +421,17 @@ def make_summary_df(sensor, score_type) -> pd.DataFrame:
     Args:
         sensor (str): sensor averages to plot, only as7262 and as7263 works currently
         score_type (str) : which score type to use, r2 or mean_error
+        measurement_type (str): which measurement method was used for testing:
+        raw, reflectance, or absorbance
 
     Returns:
         pd.DataFrame: columns have each condition, e.g. 50 msec 12.5 mA, 100 msec 25 mA etc
         and the rows will be 1, 2, .. for each sample read
 
     """
-    summary = pd.DataFrame()
-    # summary will have columns with the conditions i.e. 50 msec 12.5 mA and row
-    # for each leaf, but indexed 0, 1, .. 5
-    for i, leaf in enumerate(ALL_LEAVES):
-        scores_df, _ = read_data_df(sensor=sensor, score_type=score_type,
-                                    leaf=leaf)
-        for _column in scores_df.columns:
-            for row in scores_df.index:
-                summary.loc[i, f"{_column} msec {row}"] = scores_df.loc[row, _column]
-    return summary
+    filename = f"conditions/{sensor}_{score_type}.xlsx"
+    excel_data = pd.ExcelFile(filename)
+    return excel_data.parse(measurement_type, index_col=0)
 
 
 def make_mean_and_stds(summary: pd.DataFrame
@@ -461,19 +475,21 @@ def make_mean_and_stds(summary: pd.DataFrame
 
 
 def main_check_best_condition(ax: plt.Axes, sensor:str = "as7262",
-                              score_type="r2"):
+                              score_type="r2", measurement_mode="raw"):
     """ Plot the average of each leafs cross-validation error.
 
     Args:
         sensor (str): sensor averages to plot, only as7262 and as7263 works currently
         score_type (str) : which score type to use, r2 or mean_error
+        measurement_mode (str): which measurement method was used for testing:
+        raw, reflectance, or absorbance
 
     Returns:
         None: plots a graph of the best conditions
 
     """
     # store all the leafs scores to get the mean and std from
-    summary = make_summary_df(sensor, score_type)
+    summary = read_conditions_file(sensor, score_type, measurement_mode)
     anova_p_values = anove_test(summary)
     # make the mean and standard deviations DataFrames from summary
     means, stds = make_mean_and_stds(summary)
@@ -504,5 +520,5 @@ def make_2_sensor_graphs():
 if __name__ == '__main__':
     # main_check_best_condition()
     # test_factorial_anova(1)
-    # make_2_sensor_graphs()
-    make_files()
+    make_2_sensor_graphs()
+    # make_files()
