@@ -36,7 +36,8 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
             chloro_columns: str = "all", int_time: int = 150,
             led: str = "White LED", led_current: str = "12.5 mA",
             mean: bool = False, read_numbers: int = None,
-            ) -> tuple[pd.DataFrame, pd.DataFrame]:
+            send_leaf_numbers=False,
+            ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """ Get the data for a sensor leaf combination.
 
     Get a data set based on the leaf, sensor, which type (raw data counts or reflectance)
@@ -60,10 +61,11 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
     Returns:
         - pd.DataFrame: DataFrame of the spectra channels for the given conditions
         - pd.DataFrame: targets for fitting the spectrum, different chlorophyll measurements
+        - pd.DataFrame: DataFrame of leaf numbers, used for grouping
 
     """
     print("get data args: ")
-    print(sensor, leaf, measurement_type, int_time, led, led_current)
+    print(sensor, leaf, measurement_type, int_time, led, led_current, read_numbers, mean)
     if leaf not in ALL_LEAVES:
         raise ValueError(f"leaf '{leaf}' is not valid, must be one of these: {ALL_LEAVES}")
     if sensor not in ALL_SENSORS:
@@ -107,13 +109,18 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
     for column in data.columns:
         if 'nm' in column:
             x_columns.append(column)
-    # print(f"x columns: {x_columns}")
+    # set the index to the Leaf number
+    groups = data["Leaf No."]
     x_data = data[x_columns]
+
     if measurement_type == "absorbance":
         print("taking absorbance")
         x_data = 1 / x_data
         x_data = x_data.map(math.log10)
-    return x_data, data[chloro_columns]
+    if send_leaf_numbers:
+        return x_data, data[chloro_columns], groups
+    else:
+        return x_data, data[chloro_columns]
 
 
 @lru_cache()  # cache the data reads, helps make tests much shorter
