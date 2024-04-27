@@ -10,8 +10,11 @@ __author__ = "Kyle Vitautas Lopin"
 import pathlib
 import sys
 
-test_file_folder = pathlib.Path().absolute().parent.parent / "chlorophyll_measurements"
-sys.path.append(str(test_file_folder))
+chloro_file_folder = pathlib.Path().absolute().parent.parent / "chlorophyll_measurements"
+spectrum_file_folder = pathlib.Path().absolute().parent.parent / "spectrum_fitting"
+sys.path.append(str(chloro_file_folder))
+sys.path.append(str(spectrum_file_folder))
 # noinspection wrong-import-position
 import analysis.chlorophyll_measurements
+import analysis.spectrum_fitting
 import analysis
