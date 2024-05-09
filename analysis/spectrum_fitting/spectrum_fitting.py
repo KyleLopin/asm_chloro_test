@@ -13,9 +13,11 @@ __author__ = "Kyle Vitautas Lopin"
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.base import RegressorMixin  # for type-hinting
 from sklearn.cross_decomposition import PLSRegression as PLS
 from sklearn.linear_model import LinearRegression, LassoCV
-from sklearn.model_selection import cross_validate, GridSearchCV, ShuffleSplit
+from sklearn.model_selection import cross_val_predict, cross_validate, GridSearchCV, ShuffleSplit
+from sklearn.preprocessing import StandardScaler
 
 # local files
 import get_data
@@ -25,10 +27,10 @@ INT_TIMES = [50, 100, 150, 200, 250]
 
 # don't use
 def _fit_model(sensor: str = "as7262", leaf: str = "banana",
-              led: str = "White LED", current: str = "12.5 mA",
-              integration_time: int = 150,
-              measurement_type: str = "reflectance",
-              take_mean=True):
+               led: str = "White LED", current: str = "12.5 mA",
+               integration_time: int = 150,
+               measurement_type: str = "reflectance",
+               take_mean=True):
     # data = get_data.get_data(sensor=sensor, leaf=leaf,
     #                          measurement_type=measurement_type,
     #                          mean=take_mean)
@@ -172,11 +174,13 @@ def make_anova_excel_files():
     """
     for measure_type in ["raw", "reflectance", "absorbance"]:
         for sensor in ["as7262", "as7263"]:
-            with pd.ExcelWriter(f"{measure_type}/{sensor}_anova.xlsx") as writer:
+            with pd.ExcelWriter(f"{measure_type}/{sensor}_anova.xlsx", mode='w+',
+                                engine='openpyxl') as writer:
                 for leaf in get_data.ALL_LEAVES:
                     print(f"{sensor}, {leaf}")
                     anova_df = make_linear_regr_anova_tables(sensor=sensor, leaf=leaf)
                     anova_df.to_excel(writer, sheet_name=f"{leaf}")
+                    writer.save()
             print("pass through")
 
 
@@ -208,12 +212,48 @@ def make_excel_scoring_files():
                         r2.to_excel(writer_r2, sheet_name=f"sheet {int_time} msec {led_current}")
 
 
+def graph_y_predicted_vs_y_actual(regressor: LinearRegression, cv: int=5,
+                                  y_column: str = "Avg Total Chlorophyll (µg/cm2)",
+                                  **kwargs):
+    """ Graph the predicted chlorophyll versus actual chlorophyll levels
+
+    Args:
+        regressor (sklearn regression model): which regressor to fit the data to
+        cv (sklearn cross-validator): which cross-validator to us
+        y_column (str): which chlorophyll column to use, total, ch a or ch b
+        sensor (str): which sensor to use
+        **kwargs: arguements to pass to get_data.get_x_y to get the proper
+        data subset.
+
+    Returns:
+
+    """
+    x, y = get_data.get_x_y(**kwargs)
+    print(x)
+    y = y[y_column]
+    print(y)
+    y_predict = cross_val_predict(regressor, x, y, cv=cv)
+    scores = cross_validate(regressor, x, y, cv=cv, return_train_score=True)
+    scores = [f"{scores['test_score'].mean()} \u00B1 {scores['test_score'].std()}",
+              f"{scores['train_score'].mean()} \u00B1 {scores['train_score'].std()}"]
+    print(scores)
+    print(x)
+    plt.scatter(y, y_predict)
+    # x = StandardScaler().fit_transform(x)
+    # plt.plot(x.T)  # sanity check
+    plt.show()
+
+
 if __name__ == '__main__':
     # fit_model(sensor="as7262")
-    # regr = LinearRegression()
-    # _cv = ShuffleSplit(n_splits=10, test_size=0.2)
+    regr = LinearRegression()
+    _cv = 5
     # get_mean_absolute(regr, _cv, sensor="as7262", int_time=150,
     #                   led_current="25 mA", leaf="banana",
     #                   measurement_type="raw")
     # make_regr_table(sensor="as7262")
-    make_anova_excel_files()
+    # make_anova_excel_files()
+    graph_y_predicted_vs_y_actual(regressor=regr, cv=_cv,
+                                  sensor="as7262", int_time=150,
+                                  led_current="25 mA", leaf="mango",
+                                  measurement_type="raw", mean=True)
