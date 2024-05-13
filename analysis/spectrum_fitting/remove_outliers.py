@@ -1,10 +1,24 @@
 # Copyright (c) 2023 Kyle Lopin (Naresuan University) <kylel@nu.ac.th>
 
 """
+Module Name: outlier_removal
+Description: This module provides functions for removing outliers from regression
+models based on residuals.
+Author: Kyle Lopin (Naresuan University) <kylel@nu.ac.th>
+Copyright (c) 2023
 
+Functions:
+- remove_outliers_from_model: Removes outliers from a regression model based on residuals.
+- mahalanobis_outlier_removal: Removes outliers from a DataFrame based on Mahalanobis distance.
+- calculate_residues: Calculate residuals for each row in a DataFrame based on group-wise means.
 """
 
 __author__ = "Kyle Vitautas Lopin"
+
+# standard libraries
+# for testing data
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 # installed libraries
 import matplotlib.pyplot as plt
@@ -12,101 +26,131 @@ import numpy as np
 import pandas as pd
 from sklearn.base import RegressorMixin  # for type-hinting
 from sklearn.covariance import EmpiricalCovariance, MinCovDet
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
-from sklearn.model_selection import GroupShuffleSplit
+from sklearn.decomposition import PCA
+from sklearn.linear_model import LassoCV, LinearRegression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import PolynomialFeatures, RobustScaler, StandardScaler
 
 # local files
+import decomposition
 import get_data
 # noinspection PyUnresolvedReferences
 import preprocessors  # used in __main__ for testing
 
 
-def remove_outliers_from_model(regressor: RegressorMixin, x, y, group):
-    model = regressor.fit(x, y)
-    y_predict = model.predict(x)
+def view_pca_versus_robust_pca(x: pd.DataFrame):
+    pca_pipeline = Pipeline([('scalar', StandardScaler(with_std=False)),
+                             ('pca', PCA())])
+    robust_pipeline = Pipeline([('scalar', RobustScaler()),
+                                ('pca', PCA())])
+    pca_pipeline.fit(x)
+    plt.plot(pca_pipeline["pca"].components_[0], 'b',
+             label="PCA")
+    robust_cov = MinCovDet().fit(StandardScaler(with_std=False).fit_transform(x))
+    cov_matrix = robust_cov.covariance_
 
-    residues = y-y_predict
-    print(residues.mean(), residues.std())
+    values, vectors = np.linalg.eig(cov_matrix)
 
-    n, bins, _ = plt.hist(residues, bins=100)
-    plt.figure(2)
-    plt.scatter(y, y_predict)
+    sorted_values = np.argsort(values)[::-1]
+    sorted_vectors = vectors[:, sorted_values]
+    plt.plot(sorted_vectors[:, 0], 'r',
+             label="custom Robust PCA")
 
-    plt.show()
-
-
-def recursively_remove_outliers(regressor: LinearRegression,
-                                **kwargs):
-    x, y, groups = get_data.get_x_y(send_leaf_numbers=True,
-                                    **kwargs)
-    y = y["Avg Total Chlorophyll (µg/cm2)"]
-    print(groups)
-    groups = pd.Series(groups)
-    regressor = regressor.fit(x, y)
-    print(regressor.score(x, y))
-    x = x.set_index(groups)
-
-    std, x, y = remove_outlier(regressor, x, y, groups)
-
-    regressor = regressor.fit(x, y)
-    y_fit = regressor.predict(x)
-    print(regressor.score(x, y))
-    y_fit = pd.Series(y_fit, index=x.index)
-    y = y.groupby(by=y.index).mean()
-    y_fit = y_fit.groupby(by=y_fit.index).mean()
-    plt.scatter(y, y_fit)
-    print(r2_score(y, y_fit))
-    plt.show()
+    robust_pipeline.fit(x)
+    plt.plot(robust_pipeline["pca"].components_[0], 'g',
+             label="built in Robust PCA")
 
 
-def remove_outlier(regressor: LinearRegression,
-                   x, y, groups):
-    # Run until break conditions of no residues larger than 2.58 of the residues std
-    print("start")
-    regressor = regressor.fit(x, y)
-    y_fit = regressor.predict(x)
-    y_fit = pd.Series(y_fit, index=groups)
-    y_fit_avg = y_fit.groupby(by=y_fit.index).mean()
-    residues = (y_fit_avg - y_fit) / y_fit_avg
-    cutoff = 3*residues.std()
-    while residues.max() > cutoff:
-        print('aa', residues.max(), cutoff)
+def view_pca_linear_regr_vs_robust(x: pd.DataFrame, y: pd.Series):
+    # fit a linear regression model to pca decomposed data
+    # pca_pipeline = Pipeline([('scalar', StandardScaler(with_std=False)),
+    #                          ('pca', PCA()),
+    #                          ("linear regression", LinearRegression())])
+    regr = LinearRegression
+    # regr = LassoCV
+    # pca_pipeline.fit(x, y)
+    x = PolynomialFeatures().fit_transform(x)
+    x_ss = StandardScaler(with_std=False).fit_transform(x)
+    # x_pca = PCA().fit_transform(x_ss)
+    x_pca = decomposition.pca(x_ss, n_components=6)
+    pca_model = regr().fit(x_pca, y)
+    print(pca_model.score(x_pca, y))
+    linear_regr = regr().fit(x, y)
+    print(linear_regr.score(x, y))
+    x_robust_pca = decomposition.robust_pca(x_ss, n_components=6)
+    robust_regr = regr().fit(x_robust_pca, y)
+    print(robust_regr.score(x_robust_pca, y))
+
+
+def remove_outliers_from_model(regressor: RegressorMixin,
+                               x: pd.DataFrame,
+                               y: pd.Series,
+                               groups: pd.Series,
+                               cutoff: float = 3.0,
+                               remove_recursive: bool = False,
+                               verbose: bool = False
+                               ) -> tuple[pd.DataFrame, pd.Series,
+                                          pd.Series]:
+    """
+    Remove outliers from fitting data to a regression model based on the
+    residuals in the individual groups.
+
+    Args:
+        regressor (RegressorMixin): The regression model to be used for fitting.
+        x (pd.DataFrame): Input DataFrame containing the features.
+        y (pd.Series): Series containing the target variable.
+        groups (pd.Series): Series defining the groups for each data point.
+            It should have the same length and index as 'x' and 'y'.
+        cutoff (float, optional): The cutoff value to determine outliers.
+            Data points with residuals greater than 'cutoff * std(residuals)'
+            are considered outliers. Defaults to 3.0.
+        remove_recursive (bool, optional): If True, remove outliers iteratively until
+            no more outliers are found. Defaults to False.
+        verbose (bool, optional): If True, print verbose output including statistics about outliers.
+            Defaults to False.
+
+    Returns:
+        tuple[pd.DataFrame, pd.Series, pd.Series]: A tuple containing the cleaned DataFrame 'x',
+            the corresponding cleaned Series 'y', and the cleaned Series 'groups'
+            after removing outliers.
+    """
+    while True:  # if recursive is True keep running till no more outliers
+        # fit the model and get the y predicted values
         regressor = regressor.fit(x, y)
+        if verbose:  # save initial score to display later
+            initial_score = regressor.score(x, y)
         y_fit = regressor.predict(x)
-        y_fit = pd.Series(y_fit, index=groups)
-        y_fit_avg = y_fit.groupby(by=y_fit.index).mean()
-        residues = (y_fit_avg-y_fit)/y_fit_avg
-        # print(y)
-        print("max: ", residues.max())
-        residue_max_index = residues.argmax()
-        # dropping index of biggest residue,
-        # first reset the index so a whole leaf will not be dropped
+        # # reset the index so you can calculate the averages
+        y_fit = pd.Series(y_fit, index=x.index)
+        # pass y_fit to to remove residue function
+        residues = calculate_residues(y_fit, groups=groups)
 
-        x = x.reset_index()
-        print(f"shapes: {y.shape}, {x.shape}")
-        # print(x[x["Leaf No."] == 46])
-        # print(y.iloc[135:138])
-        # print(y_fit[135:138], residues.iloc[135:138])
-        # print(residue_max_index, 'max value: ', residues.max(),
-        #       residues.iloc[residue_max_index], 'std:', residues.std())
-        print("removing data leaf", x.iloc[residue_max_index]["Leaf No."], residue_max_index)
-        x.drop(index=x.iloc[residue_max_index].name, inplace=True)
-        y.drop(y.index[residue_max_index], inplace=True)
-        groups.drop(groups.index[residue_max_index], inplace=True)
-        # go back to set the leaf number as the index again
-        x = x.set_index("Leaf No.")
-    # plt.hist(residues, bins=100)
-    # plt.show()
-    y.index = groups
-    return residues.std(), x, y
+        # OLD WAY BELOW
+        # y_fit_avg = y_fit.groupby(by=y_fit.index).mean()
+        # # calculate the resides as averages, else the larger values will though off the results
+        # residues = (y_fit_avg - y_fit) / y_fit_avg
+        cutoff_level = cutoff*residues.std()
+        # remove any residues larger than cutoff
+        outlier_mask = residues > cutoff_level  # type: pd.Series[bool]
+        outlier_mask.index = x.index
+        outliers = x.loc[outlier_mask]
+        # drop outliers from all 3 groups
+        x.drop(index=outliers.index, inplace=True)
+        y.drop(index=outliers.index, inplace=True)
+        groups.drop(index=outliers.index, inplace=True)
+        if verbose:  # print out some basic statistics
+            print(f"residue std:  {residues.std():0.2f} with {outliers.shape[0]} outliers")
+            print(f"scores went from {initial_score:0.2f} to {regressor.score(x, y):0.2f}")
+        # return if not recursive or there are no outliers
+        if not remove_recursive or outliers.shape[0] == 0:
+            return x, y, groups
 
 
 def mahalanobis_outlier_removal(x: pd.DataFrame,
                                 use_robust: bool = True,
                                 display_hist: bool = False,
                                 cutoff_limit: float = 3.0,
-                                ) -> pd.DataFrame:
+                                ) -> np.ndarray[bool]:
     """
         Remove outliers from a DataFrame based on Mahalanobis distance.
 
@@ -118,8 +162,8 @@ def mahalanobis_outlier_removal(x: pd.DataFrame,
             cutoff_limit (float): Number of standard deviations to consider outliers (default 3.0).
 
         Returns:
-            pd.DataFrame: DataFrame with outliers removed.
-        """
+            pd.DataFrame: DataFrame mask
+    """
     if use_robust:  # fit a MCD robust estimator to data
         covariance = MinCovDet()
     else:  # fit a MLE estimator to data
@@ -132,45 +176,78 @@ def mahalanobis_outlier_removal(x: pd.DataFrame,
     # shift the distribution to calculate the distance from the standard deviation easier
     shifted_mahal = mahal_distances - mahal_distances.mean()
     cutoff = cutoff_limit*shifted_mahal.std()
-    data_mask = np.array([True if -cutoff < i < cutoff else False for i in shifted_mahal])
+    data_mask = np.where((-cutoff < shifted_mahal) & (shifted_mahal < cutoff), True, False)
     if display_hist:
         plt.hist(mahal_distances, bins=100)
         plt.figure(2)
         plt.hist(shifted_mahal, bins=100)
+        plt.axvline(cutoff, ls='--')
+        print(f"outliers removed = {x.shape[0]-x[data_mask].shape[0]}")
         plt.show()
-    return x[data_mask]
+    return data_mask
 
 
-def calculate_spectrum_residue(x: pd.DataFrame,
-                               groups:pd.Series) -> pd.DataFrame:
-    new_df = pd.DataFrame(columns=x.columns)
+def calculate_residues(x: pd.DataFrame | pd.Series,
+                       groups: pd.Series) -> pd.DataFrame:
+    """
+        Calculate residuals for each row in a DataFrame based on the difference of the individual
+        value(s) and the average of all the other rows in that group.
+
+        Args:
+            x (pandas.DataFrame): Input DataFrame containing the data.
+            groups (pandas.Series): Series defining the groups for each row in the DataFrame.
+
+        Returns:
+            pandas.DataFrame: DataFrame containing residuals for each row,
+            calculated based on group-wise means.
+            The index and columns of the returned DataFrame match those of the input DataFrame 'x'.
+    """
+    if isinstance(x, pd.DataFrame):
+        new_df = pd.DataFrame(columns=x.columns)
+    elif isinstance(x, pd.Series):
+        new_df = pd.Series()
+    else:
+        raise TypeError(f"Needs to use a pandas Series or DataFrame, {type(x)} is not valid")
     for index in x.index:
+        # get indexes with the same leaf number minus the current index
         other_leaf_indexes = groups.index[groups == groups[index]].drop(index)
+        # calculate the difference between the current index and the mean of the
+        # spectrum for the other leaves
         residue = x.loc[index] - x.loc[other_leaf_indexes].mean()
         new_df.loc[index] = residue
     return new_df
 
 
 if __name__ == '__main__':
-    # remove_outliers_from_model(SVR(),
-    #                            sensor="as7262", int_time=150,
-    #                            led_current="25 mA", leaf="mango",
-    #                            measurement_type="raw")
-    # pipe = make_pipeline(StandardScaler(), PolynomialFeatures(degree=2),
-    #                      LassoCV(max_iter=40000))
-    # recursively_remove_outliers(pipe,
-    #                             sensor="as7262", int_time=150,
-    #                             led_current="12.5 mA", leaf="mango",
-    #                             measurement_type="raw"
-    #                             )
-    _x, _, _groups = get_data.get_x_y(sensor="as7262", int_time=150,
-                                     led_current="100 mA", leaf="mango",
-                                     measurement_type="reflectance",
-                                     send_leaf_numbers=True)
-    # mahalanobis_outlier_removal(x, display_hist=True)
-    residue_spectrums = calculate_spectrum_residue(_x, _groups)
-    trimmed_x = mahalanobis_outlier_removal(residue_spectrums,
-                                            display_hist=False)
-    print(trimmed_x.shape)
-    # plt.plot(residue_spectrums.T)
-    # plt.show()
+    _x, _y, _groups = get_data.get_x_y(sensor="as7262", int_time=150,
+                                       led_current="12.5 mA", leaf="mango",
+                                       measurement_type="reflectance",
+                                       send_leaf_numbers=True)
+    _y = _y['Avg Total Chlorophyll (µg/cm2)']
+    # print(LinearRegression().fit(_x, _y).score(_x, _y))
+    # _x, _y, _groups = remove_outliers_from_model(LinearRegression(),
+    #                                              _x, _y, _groups,
+    #                                              remove_recursive=True,
+    #                                              verbose=True)
+    # mahalanobis_outlier_removal(_x, display_hist=True)
+    # residue_spectra = calculate_residues(_x, _groups)
+    # data_mask = mahalanobis_outlier_removal(residue_spectra,
+    #                                         display_hist=True)
+    # _x = _x[data_mask]
+    # _y = _y[data_mask]
+    # _groups = _groups[data_mask]
+    # print(LinearRegression().fit(_x, _y).score(_x, _y))
+    # print(trimmed_x.shape)
+    # plt.plot(residue_spectra.T)
+
+    # view_pca_versus_robust_pca(_x)
+    # Read data
+    # url = 'https://raw.githubusercontent.com/nevernervous78/nirpyresearch/master/data/milk.csv'
+    # data = pd.read_csv(url)
+    #
+    # # Assign spectra to the array X
+    # X = data.values[:, 2:].astype('float32')
+    # view_pca_versus_robust_pca(x=_x)
+    view_pca_linear_regr_vs_robust(_x, _y)
+
+    plt.show()
