@@ -20,10 +20,14 @@ def pca(X, n_components=2, robust=False):
     X_std = StandardScaler().fit_transform(X)
 
     # Calculate covariance matrix
-    cov_mat = np.cov(X_std.T)
+    if robust:
+        robust_cov = MinCovDet().fit(StandardScaler(with_std=False).fit_transform(X))
+        cov_matrix = robust_cov.covariance_
+    else:
+        cov_matrix = np.cov(X_std.T)
 
     # Get eigenvalues and eigenvectors
-    eig_vals, eig_vecs = np.linalg.eigh(cov_mat)
+    eig_vals, eig_vecs = np.linalg.eigh(cov_matrix)
 
     # flip eigenvectors' sign to enforce deterministic output
     eig_vecs, _ = extmath.svd_flip(eig_vecs, np.empty_like(eig_vecs).T)
