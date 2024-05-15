@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from sklearn.base import RegressorMixin
 from sklearn.covariance import MinCovDet
+from sklearn.cross_decomposition import PLSRegression
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import cross_validate, GroupShuffleSplit
@@ -67,10 +68,10 @@ def pca(x, n_components=2, robust=False):
     return x_pca
 
 
-def view_pca_n_components(x: pd.DataFrame, y: pd.Series,
-                          groups: pd.Series = None,
-                          regr: RegressorMixin = LinearRegression(),
-                          cv=None, pca_type: str = "PCA"):
+def view_score_vs_n_components(x: pd.DataFrame, y: pd.Series,
+                               groups: pd.Series = None,
+                               regr: RegressorMixin = LinearRegression(),
+                               cv=None, model_type: str = "PCA"):
     """
         Visualize the performance of a regression model as a function of the number
         of principal components used in PCA.
@@ -87,12 +88,15 @@ def view_pca_n_components(x: pd.DataFrame, y: pd.Series,
             groups (pd.Series, optional): Group labels for the samples used while
                 splitting the dataset into train/test set. If None, no grouping is applied.
                 Defaults to None.
-            regr (RegressorMixin, optional): The regression model to evaluate.
-                Defaults to LinearRegression().
+            regr (RegressorMixin, optional): The regression model to evaluate for PCA decomposition.
+                For a 'PLS' model type, this is ignored.  Defaults to LinearRegression().
             cv (cross-validation generator, optional): A cross-validation generator.
                  Defaults to None which uses GroupShuffleSplit with test_size=0.20 and n_splits=300
-            pca_type (str, optional): The type of PCA to use. Can be 'PCA' for standard PCA or
-                'Kernel' for Kernel PCA. Defaults to 'PCA'.
+            model_type (str, optional): The type of PCA to use. Can be 'PCA' for standard PCA,
+                'Kernel' for Kernel PCA, or 'PLS' for Partial Least Squared. If 'PCA' or
+                'KernelPCA' are used, the regression specified in 'regr' is used.
+                For 'PLS', PLSRegression is used and the regr variable is ignored.
+                Defaults to 'PCA'.
 
         Raises:
             ValueError: If 'pca_type' is not 'PCA' or 'Kernel'.
@@ -105,21 +109,25 @@ def view_pca_n_components(x: pd.DataFrame, y: pd.Series,
     if not cv:
         cv = GroupShuffleSplit(test_size=0.20, n_splits=300)
 
-    if pca_type == "PCA":
-        _pca = PCA
-    elif pca_type == "Kernel":
-        _pca = KernelPCA
-    else:
-        raise ValueError(f"'pca_type' needs to be 'PCA' or 'Kernel', '{pca_type}' is not valid")
-
     for i in range(1, x.shape[1]+1):
-        x_pca = _pca(n_components=i).fit_transform(x)
+        if model_type == "PCA":
+            x_pca = PCA(n_components=i).fit_transform(x)
+        elif model_type == "KernelPCA":
+            x_pca = KernelPCA(n_components=i, kernel='rbf').fit_transform(x)
+        elif model_type == "PLS":
+            x_pca = x
+            regr = PLSRegression(n_components=i)
+        else:
+            raise ValueError(f"'pca_type' needs to be 'PCA' or 'KernelPCA', "
+                             f"'{model_type}' is not valid")
+
+        # x_pca = _pca(n_components=i).fit_transform(x)
         scores = cross_validate(regr, x_pca, y, groups=groups,
                                 scoring='r2', cv=cv,
                                 return_train_score=True)
         cv_scores.add_scores(i, scores)
     cv_scores.plot()
-    # plt.ylim([0.8, 1.0])
+    plt.ylim([0.8, 1.0])
     plt.show()
 
 
@@ -129,5 +137,5 @@ if __name__ == '__main__':
                                        measurement_type="reflectance",
                                        send_leaf_numbers=True)
     _y = _y['Avg Total Chlorophyll (µg/cm2)']
-    _x = PolynomialFeatures(3).fit_transform(_x)
-    view_pca_n_components(_x, _y, _groups)
+    _x = PolynomialFeatures(2).fit_transform(_x)
+    view_score_vs_n_components(_x, _y, _groups, model_type="PLS")
