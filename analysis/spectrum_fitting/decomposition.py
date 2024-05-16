@@ -71,7 +71,8 @@ def pca(x, n_components=2, robust=False):
 def view_score_vs_n_components(x: pd.DataFrame, y: pd.Series,
                                groups: pd.Series = None,
                                regr: RegressorMixin = LinearRegression(),
-                               cv=None, model_type: str = "PCA"):
+                               cv=None, model_type: str = "PCA",
+                               max_comps: int = 20):
     """
         Visualize the performance of a regression model as a function of the number
         of principal components used in PCA.
@@ -97,6 +98,8 @@ def view_score_vs_n_components(x: pd.DataFrame, y: pd.Series,
                 'KernelPCA' are used, the regression specified in 'regr' is used.
                 For 'PLS', PLSRegression is used and the regr variable is ignored.
                 Defaults to 'PCA'.
+            max_comps (int, optional): The maximum number of components to test.
+                Defaults to 20, but will shrink to be the maximum components available.
 
         Raises:
             ValueError: If 'pca_type' is not 'PCA' or 'Kernel'.
@@ -109,7 +112,8 @@ def view_score_vs_n_components(x: pd.DataFrame, y: pd.Series,
     if not cv:
         cv = GroupShuffleSplit(test_size=0.20, n_splits=300)
 
-    for i in range(1, x.shape[1]+1):
+    max_components = min(max_comps, x.shape[1]+1)
+    for i in range(1, max_components+1):
         if model_type == "PCA":
             x_pca = PCA(n_components=i).fit_transform(x)
         elif model_type == "KernelPCA":
@@ -131,11 +135,51 @@ def view_score_vs_n_components(x: pd.DataFrame, y: pd.Series,
     plt.show()
 
 
+def view_decomposed_components(x: pd.DataFrame,
+                               y: pd.Series = None,
+                               decompose_type: str = "PCA",
+                               n_comps: int = 20,
+                               scale: bool = False):
+    if scale:
+        columns_hold = x.columns
+        x = StandardScaler().fit_transform(x)
+        x = pd.DataFrame(x, columns=columns_hold)
+    n_comps = min(n_comps, x.shape[1])
+    n_graphs = round(n_comps / 2)
+    if decompose_type == "PCA":
+        _pca = PCA(n_components=n_comps)
+        _pca.fit(x)
+        x_components = _pca.components_.T
+    elif decompose_type == "PLS":
+        # not 100% sure this is right
+        if y is None:
+            raise ValueError(f"If using the PLS decomposition, you need to supply a y")
+        pls = PLSRegression(n_components=n_comps)
+        pls.fit(x, y)
+        x_components = pls.x_weights_
+    else:
+        raise ValueError(f"'decompose_type' needs to be 'PCA' or 'PLS': "
+                         f"'{decompose_type}' is not valid")
+    fig, axs = plt.subplots(nrows=n_graphs, sharex=True)
+    axs = list(axs)
+    print(x_components.shape)
+    for i in range(n_graphs):
+        axs[i].plot(x.columns, x_components[:, i*2:i*2+2])
+
+
 if __name__ == '__main__':
     _x, _y, _groups = get_data.get_x_y(sensor="as7262", int_time=100,
                                        led_current="12.5 mA", leaf="mango",
                                        measurement_type="reflectance",
                                        send_leaf_numbers=True)
     _y = _y['Avg Total Chlorophyll (µg/cm2)']
-    _x = PolynomialFeatures(2).fit_transform(_x)
-    view_score_vs_n_components(_x, _y, _groups, model_type="PLS")
+    # poly_features = PolynomialFeatures(2)
+    # poly_x = poly_features.fit_transform(_x)
+    # _x = pd.DataFrame(poly_x, columns=poly_features.get_feature_names_out(_x.columns))
+    # view_score_vs_n_components(_x, _y, _groups, model_type="PLS")
+    view_decomposed_components(_x, _y, n_comps=3,
+                               decompose_type="PCA",
+                               scale=True)
+    plt.xticks(rotation=50)
+    plt.tight_layout()
+    plt.show()
