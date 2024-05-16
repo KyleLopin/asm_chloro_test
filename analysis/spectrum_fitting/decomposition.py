@@ -140,6 +140,27 @@ def view_decomposed_components(x: pd.DataFrame,
                                decompose_type: str = "PCA",
                                n_comps: int = 20,
                                scale: bool = False):
+    """
+    Visualize the decomposed components of a dataset using PCA or PLS.
+
+    This function scales the data if specified, applies the selected decomposition method
+    (PCA or PLS), and plots the first `n_comps` components. The components are displayed
+    in pairs, with each subplot showing two components.
+
+    Args:
+        x (pd.DataFrame): The input data with observations as rows and features as columns.
+        y (pd.Series, optional): The target variable required for PLS decomposition. Defaults to None.
+        decompose_type (str, optional): The type of decomposition to use. Can be 'PCA' or 'PLS'.
+            Defaults to "PCA".
+        n_comps (int, optional): The number of components to compute and plot. Defaults to 20.
+        scale (bool, optional): If True, the data is scaled before decomposition. Defaults to False.
+
+    Raises:
+        ValueError: If `decompose_type` is not 'PCA' or 'PLS', or if `decompose_type` is 'PLS' and `y` is None.
+
+    Returns:
+        None: The function displays a series of plots showing the decomposed components.
+    """
     if scale:
         columns_hold = x.columns
         x = StandardScaler().fit_transform(x)
@@ -153,14 +174,14 @@ def view_decomposed_components(x: pd.DataFrame,
     elif decompose_type == "PLS":
         # not 100% sure this is right
         if y is None:
-            raise ValueError(f"If using the PLS decomposition, you need to supply a y")
+            raise ValueError("If using the PLS decomposition, you need to supply a y")
         pls = PLSRegression(n_components=n_comps)
         pls.fit(x, y)
         x_components = pls.x_weights_
     else:
         raise ValueError(f"'decompose_type' needs to be 'PCA' or 'PLS': "
                          f"'{decompose_type}' is not valid")
-    fig, axs = plt.subplots(nrows=n_graphs, sharex=True)
+    _, axs = plt.subplots(nrows=n_graphs, sharex=True)
     axs = list(axs)
     print(x_components.shape)
     for i in range(n_graphs):
