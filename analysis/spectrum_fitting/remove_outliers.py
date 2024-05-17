@@ -28,6 +28,7 @@ from sklearn.base import RegressorMixin  # for type-hinting
 from sklearn.covariance import EmpiricalCovariance, MinCovDet
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LassoCV, LinearRegression
+from sklearn.model_selection import cross_validate, GroupShuffleSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import PolynomialFeatures, RobustScaler, StandardScaler
 
@@ -61,25 +62,39 @@ def view_pca_versus_robust_pca(x: pd.DataFrame):
              label="built in Robust PCA")
 
 
-def view_pca_linear_regr_vs_robust(x: pd.DataFrame, y: pd.Series):
+def pca_linear_regr_vs_robust(x: pd.DataFrame,
+                              y: pd.Series,
+                              groups: pd.Series,
+                              n_comps: int = 2):
     # fit a linear regression model to pca decomposed data
     # pca_pipeline = Pipeline([('scalar', StandardScaler(with_std=False)),
     #                          ('pca', PCA()),
     #                          ("linear regression", LinearRegression())])
     regr = LinearRegression
+    cv = GroupShuffleSplit(test_size=0.2, n_splits=100)
     # regr = LassoCV
     # pca_pipeline.fit(x, y)
     x = PolynomialFeatures().fit_transform(x)
     x_ss = StandardScaler(with_std=False).fit_transform(x)
     # x_pca = PCA().fit_transform(x_ss)
-    x_pca = decomposition.pca(x_ss, n_components=6)
-    pca_model = regr().fit(x_pca, y)
-    print(pca_model.score(x_pca, y))
-    linear_regr = regr().fit(x, y)
-    print(linear_regr.score(x, y))
-    x_robust_pca = decomposition.robust_pca(x_ss, n_components=6)
-    robust_regr = regr().fit(x_robust_pca, y)
-    print(robust_regr.score(x_robust_pca, y))
+    x_pca = decomposition.pca(x_ss, n_components=n_comps)
+    scores = cross_validate(regr(), x_pca, y, cv=cv, groups=groups,
+                            return_train_score=True)
+    print("PCA regression")
+    print(scores['test_score'].mean(), scores['test_score'].std(),
+          scores['train_score'].mean(), scores['train_score'].std())
+    x_robust_pca = decomposition.pca(x_ss, n_components=n_comps,
+                                     robust=True)
+    scores = cross_validate(regr(), x_robust_pca, y, cv=cv, groups=groups,
+                            return_train_score=True)
+    print("robust PCA regression")
+    print(scores['test_score'].mean(), scores['test_score'].std(),
+          scores['train_score'].mean(), scores['train_score'].std())
+    print("linear regression")
+    scores = cross_validate(regr(), x, y, cv=cv, groups=groups,
+                            return_train_score=True)
+    print(scores['test_score'].mean(), scores['test_score'].std(),
+          scores['train_score'].mean(), scores['train_score'].std())
 
 
 def remove_outliers_from_model(regressor: RegressorMixin,
@@ -190,17 +205,17 @@ def mahalanobis_outlier_removal(x: pd.DataFrame,
 def calculate_residues(x: pd.DataFrame | pd.Series,
                        groups: pd.Series) -> pd.DataFrame:
     """
-        Calculate residuals for each row in a DataFrame based on the difference of the individual
-        value(s) and the average of all the other rows in that group.
+    Calculate residuals for each row in a DataFrame based on the difference of the individual
+    value(s) and the average of all the other rows in that group.
 
-        Args:
-            x (pandas.DataFrame): Input DataFrame containing the data.
-            groups (pandas.Series): Series defining the groups for each row in the DataFrame.
+    Args:
+        x (pandas.DataFrame): Input DataFrame containing the data.
+        groups (pandas.Series): Series defining the groups for each row in the DataFrame.
 
-        Returns:
-            pandas.DataFrame: DataFrame containing residuals for each row,
-            calculated based on group-wise means.
-            The index and columns of the returned DataFrame match those of the input DataFrame 'x'.
+    Returns:
+        pandas.DataFrame: DataFrame containing residuals for each row,
+        calculated based on group-wise means.
+        The index and columns of the returned DataFrame match those of the input DataFrame 'x'.
     """
     if isinstance(x, pd.DataFrame):
         new_df = pd.DataFrame(columns=x.columns)
@@ -248,6 +263,7 @@ if __name__ == '__main__':
     # # Assign spectra to the array X
     # X = data.values[:, 2:].astype('float32')
     # view_pca_versus_robust_pca(x=_x)
-    view_pca_linear_regr_vs_robust(_x, _y)
+    pca_linear_regr_vs_robust(_x, _y, groups=_groups,
+                              n_comps=2)
 
     plt.show()
