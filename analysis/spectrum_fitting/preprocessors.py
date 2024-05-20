@@ -19,9 +19,16 @@ __author__ = "Kyle Vitautas Lopin"
 
 
 # installed libraries
+import matplotlib.pyplot as plt  # for visualizing data
 import numpy as np
 import pandas as pd
+from sklearn.base import RegressorMixin
+from sklearn.feature_selection import RFECV
+from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
+
+# local files
+import get_data  # for visualizing data
 
 
 def polynomial_expansion(x: pd.DataFrame,
@@ -80,7 +87,7 @@ def polynomial_expansion(x: pd.DataFrame,
     return new_x
 
 
-def snv(input_data):
+def snv(input_data) -> pd.DataFrame:
     """
     Standard Normal Variate function to preprocess a pandas DataFrame.
 
@@ -112,7 +119,8 @@ def snv(input_data):
     return data_snv
 
 
-def msc(input_data, reference=None):
+def msc(input_data: pd.DataFrame, reference: pd.Series=None) -> (
+        tuple[pd.DataFrame, pd.Series] | tuple[np.ndarray, np.ndarray]):
     """
     Perform Multiplicative Scatter Correction.
 
@@ -124,7 +132,7 @@ def msc(input_data, reference=None):
         it's estimated from the mean.
 
     Returns:
-        Tuple[numpy.ndarray or pandas.DataFrame, numpy.ndarray or pandas.DataFrame]:
+        Tuple[numpy.ndarray or pandas.Series, numpy.ndarray or pandas.Series]:
             MSC corrected data and reference spectrum. If input_data is a DataFrame,
             returns DataFrames, else returns numpy arrays.
     """
@@ -152,14 +160,28 @@ def msc(input_data, reference=None):
         data_msc[i, :] = (input_data[i, :] - fit[0][1]) / fit[0][0]
     if _type is pd.DataFrame:
         return pd.DataFrame(data_msc, columns=_columns,
-                            index=_index), pd.DataFrame(ref)
+                            index=_index), pd.Series(ref)
 
     return data_msc, ref
 
 
-if __name__ == '__main__':
-    _x = pd.DataFrame([[1, 2], [3, 4]], columns=["450 nm", "500 nm"])
+def recursive_feature_elimination(x: pd.DataFrame, y: pd.Series,
+                                  regr: RegressorMixin = LinearRegression(),
+                                  display_results: bool = True):
+    pass
 
-    _x = polynomial_expansion(_x)
-    print('===')
-    print(_x)
+
+if __name__ == '__main__':
+    # _x = pd.DataFrame([[1, 2], [3, 4]], columns=["450 nm", "500 nm"])
+    #
+    # _x = polynomial_expansion(_x)
+    # print('===')
+    # print(_x)
+    x, _, _ = get_data.get_x_y(sensor="as7262",  # led = "b'White'",
+                               leaf="mango",
+                               measurement_type="raw",
+                               int_time=150,
+                               send_leaf_numbers=True)
+    x, _ = msc(x)
+    plt.plot(x.T)
+    plt.show()
