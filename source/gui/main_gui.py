@@ -36,7 +36,7 @@ class SpectralSensorGUI(tk.Tk):
         # access the class to control the Arduino
         # / Red board that the sensor are attached to
         self.device = arduino.ArduinoColorSensors(self)
-        print(self.device)
+        print("device:", self.device)
         while self.device.starting_up:
             pass
         # make the graph area

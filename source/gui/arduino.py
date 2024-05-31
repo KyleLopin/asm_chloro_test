@@ -201,6 +201,7 @@ class ArduinoColorSensors(Arduino):
     def __init__(self, master):
         print('check')
         Arduino.__init__(self)
+
         self.start()
         self.master = master
         self.graph_event = threading.Event()

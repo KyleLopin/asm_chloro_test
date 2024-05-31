@@ -52,7 +52,7 @@ class TestGetData(unittest.TestCase):
             for sensor in ["as7262", "as7263"]:
                 for leaf in ALL_LEAVES:
                     data = get_data.get_data(sensor=sensor, leaf=leaf,
-                                             measurement_type=_type)
+                                             measurement_mode=_type)
                     self.assertTrue(data.shape[0] >= 5999)
                     self.assertTrue(data.shape[1] <= 20)
 
@@ -109,7 +109,7 @@ class TestGetDataSlices(unittest.TestCase):
             for sensor in ["as7262", "as7263", "as7265x"]:
                 for leaf in ALL_LEAVES:
                     data = get_data.get_data(sensor=sensor, leaf=leaf,
-                                             measurement_type=_type)
+                                             measurement_mode=_type)
                     self.each_condition(data, leaf, sensor)
 
     def each_condition(self, data, leaf, sensor):

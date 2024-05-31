@@ -87,7 +87,7 @@ def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
     if not ax:
         _, ax = plt.subplots(1, 1)
     data = get_data.get_data(sensor=sensor, leaf=leaf,
-                             measurement_type=measurement_type,
+                             measurement_mode=measurement_type,
                              mean=True)
     print(data["led"].unique())
     if led:
