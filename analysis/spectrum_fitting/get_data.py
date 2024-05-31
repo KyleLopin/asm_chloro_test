@@ -81,7 +81,7 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
                          f"'all', 'area', or 'weight'")
 
     data = get_data(sensor=sensor, leaf=leaf,
-                    measurement_type=measurement_type)
+                    measurement_mode=measurement_type)
 
     # error check the integration time, led, and led current are in the data set
     # and get only the data with those values
@@ -124,7 +124,7 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
 
 
 @lru_cache()  # cache the data reads, helps make tests much shorter
-def get_data(sensor: str, leaf: str, measurement_type: str,
+def get_data(sensor: str, leaf: str, measurement_mode: str,
              mean: bool = False) -> pd.DataFrame:
     """ Get the data for a sensor, leaf, measurement type combination.
 
@@ -132,7 +132,7 @@ def get_data(sensor: str, leaf: str, measurement_type: str,
         sensor (str): Which sensor to get the data for "as7262", "as7263", or "as7265x"
         leaf (str): Which leaf to get the data for, works for "mango", "banana",
         "jasmine", "rice", "sugarcane"
-        measurement_type (str):  Which type of data to get "raw" for data counts or
+        measurement_mode (str):  Which type of data to get "raw" for data counts or
         "reflectance" for reflectance values
         mean (bool): If the leaf measurements should be averaged
 
@@ -140,15 +140,15 @@ def get_data(sensor: str, leaf: str, measurement_type: str,
         pd.DataFrame: DataFrame of all data for the given sensor, leaf and measurement type.
 
     """
-    if measurement_type == "raw":
+    if measurement_mode == "raw":
         data_path = RAW_SPECTRUM_FOLDER
-    elif measurement_type == "reflectance":
+    elif measurement_mode == "reflectance":
         data_path = REFLECTANCE_SPECTRUM_FOLDER
     elif measurement_type == "absorbance":
         data_path = REFLECTANCE_SPECTRUM_FOLDER
     else:
         raise ValueError(f"type argument must be 'raw', 'absorbance' or 'reflectance, "
-                         f"'{measurement_type}' is not value")
+                         f"'{measurement_mode}' is not value")
     filename = data_path / f"{leaf}_{sensor}_data.csv"
     data = pd.read_csv(filename)
 
