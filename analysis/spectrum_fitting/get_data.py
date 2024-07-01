@@ -144,7 +144,7 @@ def get_data(sensor: str, leaf: str, measurement_mode: str,
         data_path = RAW_SPECTRUM_FOLDER
     elif measurement_mode == "reflectance":
         data_path = REFLECTANCE_SPECTRUM_FOLDER
-    elif measurement_type == "absorbance":
+    elif measurement_mode == "absorbance":
         data_path = REFLECTANCE_SPECTRUM_FOLDER
     else:
         raise ValueError(f"type argument must be 'raw', 'absorbance' or 'reflectance, "
