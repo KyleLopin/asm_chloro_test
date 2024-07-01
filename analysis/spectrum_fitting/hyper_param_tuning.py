@@ -125,7 +125,7 @@ def make_ard_grid_searches(x: pd.DataFrame, y: pd.Series,
     ard_reg = ARDRegression()
     # Perform grid search
     grid_search = GridSearchCV(ard_reg, param_grid,
-                               cv=5, scoring='r2',
+                               cv=CV, scoring='r2',
                                n_jobs=-1)
     grid_search.fit(x, y, groups=groups)
 
@@ -170,7 +170,7 @@ def make_ard_grid_searches(x: pd.DataFrame, y: pd.Series,
 
 
 if __name__ == '__main__':
-    save_all_ard_grid_searches()
+    save_all_grid_searches('ARD')
     # x, _y, groups = get_data.get_x_y(sensor="as7262", leaf="mango",
     #                                measurement_type="raw",
     #                                int_time=50,
