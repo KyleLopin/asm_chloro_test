@@ -15,10 +15,11 @@ from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import ARDRegression
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.linear_model import ARDRegression, HuberRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import GridSearchCV, GroupShuffleSplit, train_test_split
-from sklearn.preprocessing import PolynomialFeatures
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 # local files
 import get_data
@@ -93,10 +94,11 @@ def get_best_parameters(X, y, groups, param_grid, scoring='neg_mean_squared_erro
     return best_params
 
 
-def save_all_grid_searches(type:str = "ARD"):
-    matplotlib.use('Agg')  # Use the 'Agg' backend for non-interactive plotting
+def save_all_grid_searches(type:str = "ARD", show_figures=True):
+    if not show_figures:
+        matplotlib.use('Agg')  # Use the 'Agg' backend for non-interactive plotting
     for sensor in ["as7262", "as7263"]:
-        pdf_filename = f"ARD grid wide search {sensor}.pdf"
+        pdf_filename = f"{type} grid wide search {sensor}.pdf"
         with PdfPages(pdf_filename) as pdf:
             combinations = itertools.product(ALL_LEAVES, MEASUREMENT_TYPES, INT_TIMES, LED_CURRENTS)
 
@@ -107,10 +109,140 @@ def save_all_grid_searches(type:str = "ARD"):
                     int_time=int_time, led_current=current,
                     send_leaf_numbers=True)
                 y = y["Avg Total Chlorophyll (µg/cm2)"]
+                x = PolynomialFeatures(degree=2).fit_transform(x)
                 title = f"leaf: {leaf}, {measure_type}, int time: {int_time}, current: {current}"
                 print(title)
                 if type == "ARD":
                     make_ard_grid_searches(x, y, groups, title, pdf)
+                elif type == "Huber":
+                    x = StandardScaler().fit_transform(x)
+                    param_grid = {
+                        'epsilon': [1.0, 1.1, 1.3, 1.5, 1.7, 2.0, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10],
+                        'alpha': np.logspace(-6, -1, num=10),
+                    }
+
+                    # Initialize the Huber Regressor
+                    huber = HuberRegressor(max_iter=20000)
+                    make_regr_grid_search_best_params(
+                        huber, param_grid, x, y, groups, title, pdf,
+                        show_figure=show_figures)
+                elif type == "GradientBoost":
+                    make_grad_boost_search(x, y, groups, title, pdf)
+
+
+def make_grad_boost_search(x, y, groups, title, pdf):
+    # Define the parameter grid
+    param_grid = {
+        'loss': ['huber'],
+        'learning_rate': [0.01, 0.1, 0.2, 0.3],
+        'n_estimators': [50, 100, 150, 200],
+        'subsample': [0.6, 0.8, 1.0],
+        'criterion': ['friedman_mse', 'squared_error'],
+        # 'min_samples_split': [2, 5, 10],
+        # 'min_samples_leaf': [1, 2, 4],
+        # 'min_weight_fraction_leaf': [0.0, 0.1, 0.2],
+        # 'max_depth': [3, 5, 7],
+        # 'min_impurity_decrease': [0.0, 0.01, 0.1],
+        # 'max_features': ['auto', 'sqrt', 'log2', None],
+        # 'max_leaf_nodes': [None, 10, 20, 30, 100, 1000]
+    }
+
+    # Initialize the Gradient Boosting Regressor
+    gbr = GradientBoostingRegressor()
+
+    # Initialize GridSearchCV
+    grid_search = GridSearchCV(estimator=gbr, param_grid=param_grid,
+                               cv=CV, verbose=1, n_jobs=-1)
+
+    # Fit the grid search to your data
+    grid_search.fit(x, y, groups=groups)
+
+    # Extract the results
+    results = grid_search.cv_results_
+
+    # Best parameters and score
+    best_params = grid_search.best_params_
+    best_score = grid_search.best_score_
+
+    # Visualize the best result for each hyperparameter
+    def plot_best_results(param_name, param_values):
+        means = []
+        stds = []
+        for value in param_values:
+            mask = np.array([str(param) == str(value) for param in results[f'param_{param_name}']])
+            print("=====")
+            print(value)
+            print(results['mean_test_score'][mask].max())
+            means.append(results['mean_test_score'][mask].max())
+            stds.append(results['std_test_score'][mask].max())
+
+        plt.figure(figsize=(10, 5))
+        plt.errorbar(param_values, means, yerr=stds, fmt='o', capsize=5)
+        plt.title(f'Performance for different {param_name}')
+        plt.xlabel(param_name)
+        plt.ylabel('Mean Test Score')
+        plt.grid(True)
+        plt.show()
+
+    # Plot best results for each hyperparameter
+    for param_name in param_grid.keys():
+        param_values = param_grid[param_name]
+        plot_best_results(param_name, param_values)
+
+    # Print the best parameters and best score
+    print(f"Best parameters: {best_params}")
+    print(f"Best score: {best_score}")
+
+def make_regr_grid_search_best_params(
+        regr, param_grid: dict, x: pd.DataFrame, y: pd.Series,
+        groups: pd.Series, title: str,
+        pdf: PdfPages, show_figure: bool = True):
+
+    # Perform grid search
+    grid_search = GridSearchCV(
+        regr, param_grid, cv=CV, scoring='r2', n_jobs=-1)
+    grid_search.fit(x, y, groups=groups)
+    # Extract results
+    results = grid_search.cv_results_
+
+    # Convert results to a DataFrame
+    results_df = pd.DataFrame(results)
+    # Initialize a dictionary to store the best scores for each hyperparameter
+    # Initialize a dictionary to store the best scores for each hyperparameter
+    best_scores = {key: [] for key in param_grid}
+    # Extract best scores for each hyperparameter value
+    for param in best_scores.keys():
+        for value in param_grid[param]:
+            mask = results_df[f'param_{param}'] == value
+            best_score = results_df[mask]['mean_test_score'].max()
+            best_scores[param].append((value, best_score))
+
+    # Convert best scores to a DataFrame for plotting
+    best_scores_df = {param: pd.DataFrame(scores, columns=[param, 'best_score']) for param, scores
+                      in best_scores.items()}
+    plt.figure(figsize=(10, 6))
+    # Plot each hyperparameter's best score
+    for param, df in best_scores_df.items():
+        plt.plot(df[param], df['best_score'], label=param, marker='o')
+        plt.xscale('log')  # Set the x-axis to logarithmic scale
+
+    plt.xlabel('Hyperparameter Value')
+    plt.ylabel('Best R2 Score')
+    plt.title(f'Best R2 Score for Each Hyperparameter Value (Log Scale)\n{title}')
+    plt.legend()
+    plt.grid(True)
+    # Best parameters and model
+    best_params = grid_search.best_params_
+    print("Best parameters found:", best_params)
+    best_params_text = "\n".join([f"{key}: {value:.0e}" for key, value in best_params.items()])
+    plt.annotate(f'Best Parameters:\n{best_params_text}', xy=(0.05, 0.95), xycoords='axes fraction',
+                 fontsize=12, verticalalignment='top',
+                 bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+    if show_figure:
+        plt.show()
+    else:
+        pdf.savefig()
+        plt.close()
 
 
 def make_ard_grid_searches(x: pd.DataFrame, y: pd.Series,
@@ -170,7 +302,9 @@ def make_ard_grid_searches(x: pd.DataFrame, y: pd.Series,
 
 
 if __name__ == '__main__':
-    save_all_grid_searches('ARD')
+    # save_all_grid_searches("ARD")
+    # save_all_grid_searches("Huber", show_figures=False)
+    save_all_grid_searches("GradientBoost", show_figures=True)
     # x, _y, groups = get_data.get_x_y(sensor="as7262", leaf="mango",
     #                                measurement_type="raw",
     #                                int_time=50,
