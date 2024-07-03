@@ -117,33 +117,37 @@ def save_all_grid_searches(type:str = "ARD", show_figures=True):
                 elif type == "Huber":
                     x = StandardScaler().fit_transform(x)
                     param_grid = {
-                        'epsilon': [1.0, 1.1, 1.3, 1.5, 1.7, 2.0, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10],
-                        'alpha': np.logspace(-6, -1, num=10),
+                        'epsilon': [1, 1.35, 1.55, 1.7, 2.0, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10],
+                        'alpha': np.logspace(-5, -1, num=10),
                     }
 
                     # Initialize the Huber Regressor
-                    huber = HuberRegressor(max_iter=20000)
+                    huber = HuberRegressor(max_iter=1000)
                     make_regr_grid_search_best_params(
                         huber, param_grid, x, y, groups, title, pdf,
                         show_figure=show_figures)
                 elif type == "GradientBoost":
+                    x = StandardScaler().fit_transform(x)
                     make_grad_boost_search(x, y, groups, title, pdf)
 
 
 def make_grad_boost_search(x, y, groups, title, pdf):
     # Define the parameter grid
     param_grid = {
-        'loss': ['huber'],
-        'learning_rate': [0.01, 0.1, 0.2, 0.3],
-        'n_estimators': [50, 100, 150, 200],
-        'subsample': [0.6, 0.8, 1.0],
-        'criterion': ['friedman_mse', 'squared_error'],
-        # 'min_samples_split': [2, 5, 10],
-        # 'min_samples_leaf': [1, 2, 4],
-        # 'min_weight_fraction_leaf': [0.0, 0.1, 0.2],
-        # 'max_depth': [3, 5, 7],
+        # 'loss': ['huber', 'squared_error'],
+        # 'learning_rate': [0.01, 0.04, 0.05, 0.1, 0.2, 0.3, 0.5],
+        # 'n_estimators': [10, 20, 50, 100, 150, 200],
+        # 'subsample': [0.1, 0.3, 0.45, 0.6, 0.8, 1.0],
+        # 'criterion': ['friedman_mse', 'squared_error'],
+        # 'min_samples_split': [2, 5, 10, 20, 30],
+        # 'min_samples_leaf': [1, 2, 4, 6, 10],
+        # 'min_weight_fraction_leaf': [0.0, 0.01, 0.05, 0.1, 0.2],
+        'max_depth': [None, 1, 2, 3, 4, 5, 7, 10],
+        # 'validation_fraction': [0.1, 0.2, 0.3],
+        # "ccp_alpha": [0.1, 0.2, 0.3, 0.5, 1]
         # 'min_impurity_decrease': [0.0, 0.01, 0.1],
-        # 'max_features': ['auto', 'sqrt', 'log2', None],
+        # 'max_features': ['sqrt', 'log2', None],
+        # 'max_features': [1, 2, 3, 5, 10, 15, 20, 30],
         # 'max_leaf_nodes': [None, 10, 20, 30, 100, 1000]
     }
 
@@ -159,7 +163,7 @@ def make_grad_boost_search(x, y, groups, title, pdf):
 
     # Extract the results
     results = grid_search.cv_results_
-
+    print(results)
     # Best parameters and score
     best_params = grid_search.best_params_
     best_score = grid_search.best_score_
@@ -170,12 +174,17 @@ def make_grad_boost_search(x, y, groups, title, pdf):
         stds = []
         for value in param_values:
             mask = np.array([str(param) == str(value) for param in results[f'param_{param_name}']])
-            print("=====")
-            print(value)
-            print(results['mean_test_score'][mask].max())
-            means.append(results['mean_test_score'][mask].max())
-            stds.append(results['std_test_score'][mask].max())
+            mean_test_scores = np.nan_to_num(results['mean_test_score'][mask], nan=0.0)
+            std_test_scores = np.nan_to_num(results['std_test_score'][mask], nan=0.0)
 
+            mean_test_score = mean_test_scores.max()
+            std_test_score = std_test_scores.max()
+
+            means.append(mean_test_score)
+            stds.append(std_test_score)
+        param_values = [x if x is not None else 0 for x in param_values]
+        print(param_values)
+        print(means)
         plt.figure(figsize=(10, 5))
         plt.errorbar(param_values, means, yerr=stds, fmt='o', capsize=5)
         plt.title(f'Performance for different {param_name}')
@@ -304,7 +313,7 @@ def make_ard_grid_searches(x: pd.DataFrame, y: pd.Series,
 if __name__ == '__main__':
     # save_all_grid_searches("ARD")
     # save_all_grid_searches("Huber", show_figures=False)
-    save_all_grid_searches("GradientBoost", show_figures=True)
+    save_all_grid_searches("Huber", show_figures=True)
     # x, _y, groups = get_data.get_x_y(sensor="as7262", leaf="mango",
     #                                measurement_type="raw",
     #                                int_time=50,
