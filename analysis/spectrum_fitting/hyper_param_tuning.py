@@ -15,10 +15,13 @@ from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.cross_decomposition import PLSRegression
+from sklearn.decomposition import KernelPCA
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.linear_model import ARDRegression, HuberRegressor
+from sklearn.linear_model import ARDRegression, HuberRegressor, Lasso, LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import GridSearchCV, GroupShuffleSplit, train_test_split
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 # local files
@@ -94,11 +97,11 @@ def get_best_parameters(X, y, groups, param_grid, scoring='neg_mean_squared_erro
     return best_params
 
 
-def save_all_grid_searches(type:str = "ARD", show_figures=True):
+def save_all_grid_searches(regr_type:str = "ARD", show_figures=True):
     if not show_figures:
         matplotlib.use('Agg')  # Use the 'Agg' backend for non-interactive plotting
-    for sensor in ["as7262", "as7263"]:
-        pdf_filename = f"{type} grid wide search {sensor}.pdf"
+    for sensor in ["as7262"]:
+        pdf_filename = f"{regr_type} grid wide search {sensor}.pdf"
         with PdfPages(pdf_filename) as pdf:
             combinations = itertools.product(ALL_LEAVES, MEASUREMENT_TYPES, INT_TIMES, LED_CURRENTS)
 
@@ -110,15 +113,15 @@ def save_all_grid_searches(type:str = "ARD", show_figures=True):
                     send_leaf_numbers=True)
                 y = y["Avg Total Chlorophyll (µg/cm2)"]
                 x = PolynomialFeatures(degree=2).fit_transform(x)
+                x = StandardScaler().fit_transform(x)
                 title = f"leaf: {leaf}, {measure_type}, int time: {int_time}, current: {current}"
                 print(title)
-                if type == "ARD":
+                if regr_type == "ARD":
                     make_ard_grid_searches(x, y, groups, title, pdf)
-                elif type == "Huber":
-                    x = StandardScaler().fit_transform(x)
+                elif regr_type == "Huber":
                     param_grid = {
-                        'epsilon': [1, 1.35, 1.55, 1.7, 2.0, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10],
-                        'alpha': np.logspace(-5, -1, num=10),
+                        'epsilon': [0.5, 1, 1.35, 1.55, 1.7, 2.0, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10],
+                        'alpha': np.logspace(-5, 1, num=10),
                     }
 
                     # Initialize the Huber Regressor
@@ -126,9 +129,32 @@ def save_all_grid_searches(type:str = "ARD", show_figures=True):
                     make_regr_grid_search_best_params(
                         huber, param_grid, x, y, groups, title, pdf,
                         show_figure=show_figures)
-                elif type == "GradientBoost":
-                    x = StandardScaler().fit_transform(x)
+                elif regr_type == "GradientBoost":
                     make_grad_boost_search(x, y, groups, title, pdf)
+                elif regr_type == "PLS":
+                    param_grid = {"n_components": [3, 5, 7, 8, 9, 10, 13, 16, 20]}
+                    pls = PLSRegression(max_iter=10000)
+                    make_regr_grid_search_best_params(
+                        pls, param_grid, x, y, groups, title, pdf,
+                        show_figure=show_figures
+                    )
+                elif regr_type == "Lasso":
+                    param_grid = {"alpha": np.logspace(-4, -1, 10)}
+                    lasso = Lasso(max_iter=10000)
+                    make_regr_grid_search_best_params(
+                        lasso, param_grid, x, y, groups, title, pdf,
+                        show_figure=show_figures
+                    )
+                elif regr_type == "Kernel":
+                    param_grid = {"pca__n_components": [5, 10, 13, 16, 20],
+                                  'pca__gamma': np.logspace(-6, -1, 10)
+                                  }
+                    kernel = Pipeline([("pca", KernelPCA(kernel='rbf')),
+                                       ('LR', LinearRegression())])
+                    make_regr_grid_search_best_params(
+                        kernel, param_grid, x, y, groups, title, pdf,
+                        show_figure=show_figures
+                    )
 
 
 def make_grad_boost_search(x, y, groups, title, pdf):
@@ -313,7 +339,7 @@ def make_ard_grid_searches(x: pd.DataFrame, y: pd.Series,
 if __name__ == '__main__':
     # save_all_grid_searches("ARD")
     # save_all_grid_searches("Huber", show_figures=False)
-    save_all_grid_searches("Huber", show_figures=True)
+    save_all_grid_searches("PLS", show_figures=True)
     # x, _y, groups = get_data.get_x_y(sensor="as7262", leaf="mango",
     #                                measurement_type="raw",
     #                                int_time=50,
