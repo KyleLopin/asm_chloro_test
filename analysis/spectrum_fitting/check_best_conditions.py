@@ -8,6 +8,7 @@ led current, measurement types, and integration times for the different leave ty
 __author__ = "Kyle Vitautas Lopin"
 
 # standard libraries
+from collections import defaultdict
 import itertools
 import warnings
 
@@ -148,7 +149,7 @@ def print_pg_anova_table(leaf: str, sensor: str):
     filtered_aov.to_csv(output_filename, index=False)
 
 
-def check_leaf_sensor_p_values():
+def get_combined_anova_tables():
     combined_data = []
     # make combined dataset
     for leaf in ALL_LEAVES:
@@ -157,16 +158,11 @@ def check_leaf_sensor_p_values():
             df['Leaf'] = leaf
             df['Sensor'] = sensor
             combined_data.append(df)
-    print('======')
     combined_df = pd.concat(combined_data, ignore_index=True)
     # Convert relevant columns to float32
     numeric_cols = combined_df.select_dtypes(include=[np.number]).columns
     combined_df[numeric_cols] = combined_df[numeric_cols].astype(np.float32)
-    print(combined_df)
-    # Perform two-way ANOVA
-    # aov = pg.anova(dv='Score', between=['Leaf', 'Sensor'], data=combined_df,
-    #                detailed=True)
-    # doesnt work too much memory
+
     aov = pg.anova(dv='Score',
                    between=['Leaf', 'Sensor', 'Regression Model',
                             'Cross Validation', 'Preprocess',
@@ -178,6 +174,38 @@ def check_leaf_sensor_p_values():
     print(aov)
 
 
+def print_1_way_anova(ind_variable):
+    df = get_combined_anova_tables()
+    aov = pg.anova(dv='Score',
+                   between=[ind_variable],
+                   data=df,
+                   detailed=True)
+    # Display the ANOVA table
+    print(aov)
+
+
+def print_best_conditions():
+    best_conditions = []
+    condition_counts = defaultdict(int)
+    for leaf in ALL_LEAVES:
+        for sensor in SENSORS:
+            df = pd.read_csv(f"ANOVA_data/ANOVA_{leaf}_{sensor}.csv")
+            # Group by all conditions except 'Score' and calculate mean
+            grouped = df.groupby(['Leaf', 'Sensor', 'Regression Model',
+                                  'Cross Validation', 'Preprocess',
+                                  'LED Current', 'Integration Time',
+                                  'Measurement Type'])
+            means = grouped.mean()
+            # Find the maximum mean and its standard deviation
+            max_mean = means['Score'].max()
+
+            # Store the conditions with the maximum mean in tracker
+            conditions_with_max_mean = means.index[means['Score'] == max_mean].values[0]
+            print(conditions_with_max_mean, max_mean)
+
+
 if __name__ == '__main__':
     # make_anova_table_files()
-    print_pg_anova_tables()
+    # print_pg_anova_tables()
+    # print_1_way_anova('Regression Model')
+    print_best_conditions()
