@@ -124,7 +124,8 @@ def print_pg_anova_tables():
 
 
 def print_pg_anova_table(leaf: str, sensor: str):
-    filename =f"ANOVA_data/ANOVA_{leaf}_{sensor}.csv"
+    print(f"{leaf} {sensor}")
+    filename = f"ANOVA_data/ANOVA_{leaf}_{sensor}.csv"
     df = pd.read_csv(filename)
 
     # Perform the ANOVA test
@@ -133,9 +134,21 @@ def print_pg_anova_table(leaf: str, sensor: str):
                             'Preprocess', 'Regression Model', 'Cross Validation'],
                    data=df)
 
+    # Apply Bonferroni correction to the p-values
+    aov['p-corrected'] = pg.multicomp(aov['p-unc'], method='bonferroni')[1]
+
+    # Filter rows where p-corrected > 0.001
+    filtered_aov = aov[aov['p-corrected'] < 0.001]
+
+    pd.set_option('display.max_rows', None)  # Ensure all rows are displayed
+    print(filtered_aov)
+
+    # Save the filtered ANOVA table to a new CSV file
+    output_filename = f"ANOVA_data/Filtered_ANOVA_{leaf}_{sensor}.csv"
+    filtered_aov.to_csv(output_filename, index=False)
+
 
 def check_leaf_sensor_p_values():
-
     combined_data = []
     # make combined dataset
     for leaf in ALL_LEAVES:
@@ -167,4 +180,4 @@ def check_leaf_sensor_p_values():
 
 if __name__ == '__main__':
     # make_anova_table_files()
-    check_leaf_sensor_p_values()
+    print_pg_anova_tables()
