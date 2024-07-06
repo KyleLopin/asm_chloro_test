@@ -27,7 +27,7 @@ import pandas as pd
 from sklearn.base import RegressorMixin  # for type-hinting
 from sklearn.covariance import EmpiricalCovariance, MinCovDet
 from sklearn.decomposition import PCA
-from sklearn.linear_model import LassoCV, LinearRegression
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import cross_validate, GroupShuffleSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import PolynomialFeatures, RobustScaler, StandardScaler
@@ -192,6 +192,7 @@ def mahalanobis_outlier_removal(x: pd.DataFrame,
     shifted_mahal = mahal_distances - mahal_distances.mean()
     cutoff = cutoff_limit*shifted_mahal.std()
     data_mask = np.where((-cutoff < shifted_mahal) & (shifted_mahal < cutoff), True, False)
+    print(data_mask)
     if display_hist:
         plt.hist(mahal_distances, bins=100)
         plt.figure(2)
@@ -221,8 +222,9 @@ def calculate_residues(x: pd.DataFrame | pd.Series,
         new_df = pd.DataFrame(columns=x.columns)
     elif isinstance(x, pd.Series):
         new_df = pd.Series()
-    else:
-        raise TypeError(f"Needs to use a pandas Series or DataFrame, {type(x)} is not valid")
+
+    # else:  i np.array just pass
+    #     raise TypeError(f"Needs to use a pandas Series or DataFrame, {type(x)} is not valid")
     for index in x.index:
         # get indexes with the same leaf number minus the current index
         other_leaf_indexes = groups.index[groups == groups[index]].drop(index)
@@ -233,9 +235,26 @@ def calculate_residues(x: pd.DataFrame | pd.Series,
     return new_df
 
 
+def remove_outliers_from_residues(x, y, groups,
+                                  regr_model: RegressorMixin=LinearRegression(),
+                                  verbose: bool=False):
+    if verbose:
+        initial_score = regr_model.fit(x, y).score(x, y)
+        initial_samples = x.shape[0]
+    residues = calculate_residues(x, groups)
+    data_mask = mahalanobis_outlier_removal(residues)
+    x = x[data_mask]
+    y = y[data_mask]
+    groups = groups[data_mask]
+    if verbose:
+        print(f"outliers removed = {initial_samples - x.shape[0]}")
+        print(f"scores went from {initial_score:0.2f} to {regr_model.fit(x, y).score(x, y):0.2f}")
+    return x, y, groups
+
+
 if __name__ == '__main__':
     _x, _y, _groups = get_data.get_x_y(sensor="as7262", int_time=150,
-                                       led_current="12.5 mA", leaf="mango",
+                                       led_current="100 mA", leaf="banana",
                                        measurement_type="reflectance",
                                        send_leaf_numbers=True)
     _y = _y['Avg Total Chlorophyll (µg/cm2)']
@@ -248,6 +267,10 @@ if __name__ == '__main__':
     # residue_spectra = calculate_residues(_x, _groups)
     # data_mask = mahalanobis_outlier_removal(residue_spectra,
     #                                         display_hist=True)
+    _x, _y, _groups = remove_outliers_from_residues(_x, _y, _groups, verbose=True)
+    _x = PolynomialFeatures(degree=2).fit_transform(_x)
+    model = LinearRegression().fit(_x, _y)
+    print(f"final poly score: {model.score(_x, _y)}")
     # _x = _x[data_mask]
     # _y = _y[data_mask]
     # _groups = _groups[data_mask]
@@ -263,7 +286,7 @@ if __name__ == '__main__':
     # # Assign spectra to the array X
     # X = data.values[:, 2:].astype('float32')
     # view_pca_versus_robust_pca(x=_x)
-    pca_linear_regr_vs_robust(_x, _y, groups=_groups,
-                              n_comps=2)
-
-    plt.show()
+    # pca_linear_regr_vs_robust(_x, _y, groups=_groups,
+    #                           n_comps=5)
+    #
+    # plt.show()
