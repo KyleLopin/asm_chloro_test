@@ -22,7 +22,7 @@ from analysis.spectrum_fitting import remove_outliers
 
 
 class TestCalculateSpectrumResidue(unittest.TestCase):
-    """Test case for the calculate_spectrum_residue function."""
+    """Test cases for the calculate_spectrum_residue function."""
 
     def test_simple(self):
         """Test the function with a simple dataset."""
@@ -30,7 +30,7 @@ class TestCalculateSpectrumResidue(unittest.TestCase):
         groups = pd.Series([0, 0, 0])
         correct_df = pd.DataFrame([[-1.0, -1.0], [-1.0, -1.0], [2.0, 2.0]],
                                   columns=["450 nm", "550 nm"])
-        results = remove_outliers.calculate_spectrum_residue(x, groups)
+        results = remove_outliers.calculate_residues(x, groups)
         assert_frame_equal(results, correct_df, check_exact=False,
                            check_dtype=False)
 
@@ -43,6 +43,6 @@ class TestCalculateSpectrumResidue(unittest.TestCase):
         correct_df = pd.DataFrame([[-1.0, -1.0], [-1.0, -1.0], [2.0, 2.0],
                                          [-1.0, -1.0], [-1.0, -1.0], [2.0, 2.0]],
                                   columns=["450 nm", "550 nm"])
-        results = remove_outliers.calculate_spectrum_residue(x, groups)
+        results = remove_outliers.calculate_residues(x, groups)
         assert_frame_equal(results, correct_df, check_exact=False,
                            check_dtype=False)
