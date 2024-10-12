@@ -37,17 +37,18 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
             led: str = "White LED", led_current: str = "12.5 mA",
             mean: bool = False, read_numbers: int = None,
             send_leaf_numbers=False,
-            ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+            ) -> (tuple[pd.DataFrame, pd.DataFrame] |
+                  tuple[pd.DataFrame, pd.DataFrame, pd.Series]):
     """ Get the data for a sensor leaf combination.
 
-    Get a data set based on the leaf, sensor, which regr_type (raw data counts or reflectance)
+    Get a data set based on the leaf, sensor, which type (raw data counts or reflectance)
     the integration time, led, and led current.
 
     Args:
         sensor (str): Which sensor to get the data for "as7262", "as7263", or "as7265x"
         leaf (str): Which leaf to get the data for, works for "mango", "banana",
         "jasmine", "rice", "sugarcane"
-        measurement_type (str):  Which regr_type of data to get "raw" for data counts,
+        measurement_type (str):  Which type of data to get "raw" for data counts,
         "reflectance" for reflectance values, or "absorbance".
         chloro_columns (str):  Which chlorophyll columns to get, will have chlorophyll
         by area or weight. Valid inputs are "all", "area", or "weight"
@@ -90,8 +91,9 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
                          f"{data['integration time'].unique()}")
     data = data[data["integration time"] == int_time]
 
-    if sensor == "as7265x" and led == "White LED":
+    if sensor == "as7265x" and led == 'White LED':
         led = "b'White'"
+
     if led not in data["led"].unique():
         raise ValueError(f"'{led}' is not a valid led, valid values are:"
                          f"{data['led'].unique()}")
@@ -128,18 +130,18 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
 @lru_cache()  # cache the data reads, helps make tests much shorter
 def get_data(sensor: str, leaf: str, measurement_mode: str,
              mean: bool = False) -> pd.DataFrame:
-    """ Get the data for a sensor, leaf, measurement regr_type combination.
+    """ Get the data for a sensor, leaf, measurement type combination.
 
     Args:
         sensor (str): Which sensor to get the data for "as7262", "as7263", or "as7265x"
         leaf (str): Which leaf to get the data for, works for "mango", "banana",
         "jasmine", "rice", "sugarcane"
-        measurement_mode (str):  Which regr_type of data to get "raw" for data counts or
+        measurement_mode (str):  Which type of data to get "raw" for data counts or
         "reflectance" for reflectance values
         mean (bool): If the leaf measurements should be averaged
 
     Returns:
-        pd.DataFrame: DataFrame of all data for the given sensor, leaf and measurement regr_type.
+        pd.DataFrame: DataFrame of all data for the given sensor, leaf and measurement type.
 
     """
     if measurement_mode == "raw":
@@ -149,7 +151,7 @@ def get_data(sensor: str, leaf: str, measurement_mode: str,
     elif measurement_mode == "absorbance":
         data_path = REFLECTANCE_SPECTRUM_FOLDER
     else:
-        raise ValueError(f"regr_type argument must be 'raw', 'absorbance' or 'reflectance, "
+        raise ValueError(f"type argument must be 'raw', 'absorbance' or 'reflectance, "
                          f"'{measurement_mode}' is not value")
     filename = data_path / f"{leaf}_{sensor}_data.csv"
     data = pd.read_csv(filename)
@@ -169,7 +171,7 @@ def get_options(sensor: str, leaf: str, measurement_type: str
         sensor (str): Which sensor to get the data for "as7262", "as7263", or "as7265x"
         leaf (str): Which leaf to get the data for, works for "mango", "banana",
         "jasmine", "rice", "sugarcane"
-        measurement_type (str):  Which regr_type of data to get "raw" for data counts or
+        measurement_type (str):  Which type of data to get "raw" for data counts or
         "reflectance" for reflectance values
 
     Returns:
@@ -207,7 +209,7 @@ def get_data_slices(df: pd.DataFrame, selected_column: str,
 if __name__ == '__main__':
     # Test the function works
     # x, y = get_x_y(sensor="as7262", leaf="banana",
-    #                 regr_type="raw", chloro_columns="all",
+    #                 type="raw", chloro_columns="all",
     #                 int_time=150, led="White LED")
     # print(x)
     # print('=====')
