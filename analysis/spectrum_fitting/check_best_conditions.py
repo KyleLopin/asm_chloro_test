@@ -13,6 +13,8 @@ import itertools
 import warnings
 
 # installed libraries
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 import pandas as pd
 import pingouin as pg
@@ -24,6 +26,8 @@ from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 # local files
 import get_data
+from global_classes import CustomDict
+from helper_functions import filter_df
 
 warnings.filterwarnings(action='ignore', category=DataConversionWarning)
 LED_CURRENTS = ["12.5 mA", "25 mA", "50 mA", "100 mA"]
@@ -149,6 +153,77 @@ def print_pg_anova_table(leaf: str, sensor: str):
     filtered_aov.to_csv(output_filename, index=False)
 
 
+def plot_scores_for_leaf_sensor(df, leaf, sensor, pdf=None):
+    # Filter the DataFrame for the given leaf and sensor
+    df_filtered = df[(df['Leaf'] == leaf) & (df['Sensor'] == sensor)]
+
+    conditions_to_plot = ['LED Current', 'Integration Time', 'Measurement Type', 'Preprocess',
+                          'Cross Validation']
+    column = 'Cross Validation'
+    # Group by 'Regression Model' and calculate the max of 'Score'
+    grouped = df_filtered.groupby(column).agg({'Score': 'max'}).reset_index()
+    print()
+    # Plot the max score
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    plt.bar(grouped[column], grouped['Score'], color='skyblue')
+    plt.title(f'Best Scores for {leaf} - {sensor}')
+    plt.xlabel('Regression Model')
+    plt.ylabel('Best Score')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.ylim([0.8, 1.0])
+
+    if pdf:
+        pdf.savefig(fig)
+    else:
+        plt.show()
+
+
+def collect_best_scores_for_each_model():
+    # Dictionary to hold lists of best scores for each model
+    model_best_scores = defaultdict(list)
+
+    for leaf in ALL_LEAVES:
+        for sensor in SENSORS:
+            # Load the data for the current leaf/sensor combination
+            df = pd.read_csv(f"ANOVA_data/ANOVA_{leaf}_{sensor}.csv")
+
+            # Group by 'Regression Model' and calculate the max of 'Score'
+            grouped = df.groupby('Regression Model').agg({'Score': 'max'}).reset_index()
+
+            # Store the best score for each model
+            for index, row in grouped.iterrows():
+                model = row['Regression Model']
+                best_score = row['Score']
+                model_best_scores[model].append(best_score)
+
+    return model_best_scores
+
+
+def plot_model_performance(model_best_scores):
+    # Prepare lists for plotting
+    models = []
+    mean_scores = []
+    std_scores = []
+
+    # Calculate mean and std for each model
+    for model, scores in model_best_scores.items():
+        models.append(model)
+        mean_scores.append(pd.Series(scores).mean())
+        std_scores.append(pd.Series(scores).std())
+
+    # Plotting the mean and std of the best scores for each model
+    plt.figure(figsize=(10, 6))
+    plt.errorbar(models, mean_scores, yerr=std_scores, fmt='o', capsize=5, elinewidth=2,
+                 markeredgewidth=2)
+    plt.title('Mean and Std of Best Scores for Each Regression Model')
+    plt.xlabel('Regression Model')
+    plt.ylabel('Score')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
 def get_combined_anova_tables():
     combined_data = []
     # make combined dataset
@@ -162,50 +237,366 @@ def get_combined_anova_tables():
     # Convert relevant columns to float32
     numeric_cols = combined_df.select_dtypes(include=[np.number]).columns
     combined_df[numeric_cols] = combined_df[numeric_cols].astype(np.float32)
+    return combined_df
+
+def print_1_way_anova(ind_variable):
+    print("check")
+    df = get_combined_anova_tables()
+    print(df.shape)
+    print(df)
+    if True:
+        df = df[df['Cross Validation'] == "Shuffle"]
+        df = df[df['Preprocess'] == "Poly"]
+    print(df.shape)
+    all_variable = ['Leaf', 'Sensor', 'Regression Model',
+                    'Cross Validation', 'Preprocess',
+                    "LED Current", "Integration Time",
+                    "Measurement Type"]
+    # aov = pg.anova(dv='Score',
+    #                between=[ind_variable],
+    #                data=df,
+    #                detailed=True)
 
     aov = pg.anova(dv='Score',
                    between=['Leaf', 'Sensor', 'Regression Model',
-                            'Cross Validation', 'Preprocess',
                             "LED Current", "Integration Time",
                             "Measurement Type"],
-                   data=combined_df,
-                   detailed=True)
-    # Display the ANOVA table
-    print(aov)
-
-
-def print_1_way_anova(ind_variable):
-    df = get_combined_anova_tables()
-    aov = pg.anova(dv='Score',
-                   between=[ind_variable],
                    data=df,
                    detailed=True)
     # Display the ANOVA table
     print(aov)
 
 
-def print_best_conditions():
-    best_conditions = []
-    condition_counts = defaultdict(int)
+def paiwise_ttests():
+    print("pairwse ttests")
+    df = get_combined_anova_tables()
+    # Run pairwise t-tests for 'Leaf'
+    # ttest_leaf = pg.pairwise_ttests(dv='Score', between='Leaf', data=df, padjust='bonf')
+
+    # Run pairwise t-tests for 'Sensor'
+    print(df["Sensor"].unique())
+    ttest_sensor = pg.pairwise_ttests(dv='Score', between='Sensor', data=df, padjust='bonf')
+
+    # Run pairwise t-tests for 'Regression Model'
+    ttest_reg_model = pg.pairwise_ttests(dv='Score', between='Regression Model', data=df,
+                                         padjust='bonf')
+
+    # Run pairwise t-tests for 'LED Current'
+    ttest_led_current = pg.pairwise_ttests(dv='Score', between='LED Current', data=df,
+                                           padjust='bonf')
+
+    # Run pairwise t-tests for 'Integration Time'
+    ttest_integration_time = pg.pairwise_ttests(dv='Score', between='Integration Time', data=df,
+                                                padjust='bonf')
+
+    # Run pairwise t-tests for 'Measurement Type'
+    ttest_measurement_type = pg.pairwise_ttests(dv='Score', between='Measurement Type', data=df,
+                                                padjust='bonf')
+
+    # Display the results for each t-test
+    # print(ttest_leaf)
+    print(ttest_sensor)
+    print(ttest_reg_model)
+    print(ttest_led_current)
+    print(ttest_integration_time)
+    print(ttest_measurement_type)
+
+
+import pandas as pd
+
+
+def get_best_conditions() -> dict:
+    """
+    Combines the functionality to find:
+    1. The best conditions for each sensor across all leaves (best overall sensor conditions).
+    2. The best overall conditions for all leaves and sensors combined.
+
+    Returns:
+    dict: A dictionary containing two DataFrames:
+          - 'best_sensor_conditions': Best conditions for each sensor overall.
+          - 'best_overall_conditions': Best overall conditions for all leaves and sensors combined.
+
+    Example usage:
+    --------------
+    # Get both the best sensor conditions and the best overall conditions
+    best_conditions_dict = get_best_conditions()
+
+    # Print both results
+    print("Best Overall Sensor Conditions:\n", best_conditions_dict['best_sensor_conditions'])
+    print("\nBest Overall Conditions for All Leaves and Sensors:\n", best_conditions_dict['best_overall_conditions'])
+    """
+    # Get the DataFrame from the combined ANOVA tables
+    df = get_combined_anova_tables()
+
+    # --- Best Conditions for Each Sensor (Overall across all leaves) ---
+    # Group by 'Sensor' and other conditions, calculate the average 'Score' across all leaves
+    mean_scores_sensor = df.groupby(
+        ['Sensor', 'Preprocess', 'Regression Model', 'Cross Validation', 'LED Current',
+         'Integration Time', 'Measurement Type']
+    )['Score'].mean().reset_index()
+
+    # Find the row with the highest average score for each sensor
+    best_avg_conditions_for_sensor = mean_scores_sensor.loc[
+        mean_scores_sensor.groupby('Sensor')['Score'].idxmax()]
+
+    # --- Best Overall Conditions for All Leaves and Sensors ---
+    # Group by all condition columns without 'Sensor' and 'Leaf', then calculate the mean score across all leaves and sensors
+    mean_scores_overall = df.groupby(
+        ['Preprocess', 'Regression Model', 'Cross Validation', 'LED Current', 'Integration Time',
+         'Measurement Type']
+    )['Score'].mean().reset_index()
+
+    # Find the row with the highest overall score
+    best_overall_conditions = mean_scores_overall.loc[mean_scores_overall['Score'].idxmax()]
+
+    # Return both DataFrames as a dictionary
+    return {
+        'best_sensor_conditions': best_avg_conditions_for_sensor,
+        'best_overall_conditions': best_overall_conditions
+    }
+
+
+def collect_best_scores_for_each_condition(condition_name):
+    # Dictionary to hold lists of best scores for each combination of the condition and regression models
+    condition_best_scores = defaultdict(lambda: defaultdict(list))
+
     for leaf in ALL_LEAVES:
         for sensor in SENSORS:
+            # Load the data for the current leaf/sensor combination
             df = pd.read_csv(f"ANOVA_data/ANOVA_{leaf}_{sensor}.csv")
-            # Group by all conditions except 'Score' and calculate mean
-            grouped = df.groupby(['Leaf', 'Sensor', 'Regression Model',
-                                  'Cross Validation', 'Preprocess',
-                                  'LED Current', 'Integration Time',
-                                  'Measurement Type'])
-            means = grouped.mean()
-            # Find the maximum mean and its standard deviation
-            max_mean = means['Score'].max()
 
-            # Store the conditions with the maximum mean in tracker
-            conditions_with_max_mean = means.index[means['Score'] == max_mean].values[0]
-            print(conditions_with_max_mean, max_mean)
+            # Group by the condition and regression model, then find the max score for each combination
+            grouped = df.groupby([condition_name, 'Regression Model']).agg({'Score': 'max'}).reset_index()
+
+            # Store the best score for each regression model under each condition
+            for index, row in grouped.iterrows():
+                condition_value = row[condition_name]
+                model = row['Regression Model']
+                best_score = row['Score']
+                condition_best_scores[condition_value][model].append(best_score)
+
+    return condition_best_scores
+
+def plot_performance_for_condition(condition_name, condition_best_scores):
+    # Prepare the plot for each condition
+    plt.figure(figsize=(10, 6))
+
+    # Iterate through each condition value (e.g., each 'LED Current', 'Integration Time')
+    for condition_value, model_scores in condition_best_scores.items():
+        models = []
+        mean_scores = []
+        std_scores = []
+
+        # Calculate mean and std for each regression model under the current condition value
+        for model, scores in model_scores.items():
+            models.append(model)
+            mean_scores.append(pd.Series(scores).mean())
+            std_scores.append(pd.Series(scores).std())
+
+        # Plotting the mean and std of best scores for each regression model under the current condition
+        plt.errorbar(models, mean_scores, yerr=std_scores, fmt='o', capsize=5, elinewidth=2, markeredgewidth=2,
+                     label=f"{condition_name}: {condition_value}")
+
+    plt.title(f'Mean and Std of Best Scores for Different {condition_name}')
+    plt.xlabel('Regression Model')
+    plt.ylabel('Score')
+    plt.legend(title=f'{condition_name}')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_leaf_vs_sensor_conditions_with_logging() -> None:
+    """
+    Plots bar graphs for each leaf comparing:
+    1. The best overall conditions (best_overall_conditions)
+    2. The best conditions for the sensor (best_sensor_condition)
+    3. The maximum score for that leaf (best_leaf_condition)
+
+    For each graph, prints out the actual conditions used for:
+    - Best overall condition
+    - Best sensor condition
+    - Best leaf condition for each leaf
+    """
+    # Get the DataFrame from combined ANOVA tables
+    df = get_combined_anova_tables()
+
+    # Get the best overall conditions and sensor-specific conditions
+    best_conditions = get_best_conditions()
+    best_sensor_conditions = best_conditions['best_sensor_conditions']
+    best_overall_conditions = best_conditions['best_overall_conditions']
+
+    # Inner function to filter data based on conditions
+    def filter_data(leaf_data, condition):
+        return (leaf_data['Regression Model'] == condition['Regression Model']) & \
+            (leaf_data['LED Current'] == condition['LED Current']) & \
+            (leaf_data['Integration Time'] == condition['Integration Time']) & \
+            (leaf_data['Measurement Type'] == condition['Measurement Type']) & \
+            (leaf_data['Preprocess'] == condition['Preprocess']) & \
+            (leaf_data['Cross Validation'] == condition['Cross Validation'])
+
+    # List of sensors
+    sensors = df['Sensor'].unique()
+
+    # Loop through each sensor and plot a comparison graph for the sensor across all leaves
+    for sensor in sensors:
+        plt.figure(figsize=(12, 8))
+
+        # Initialize lists to store data for plotting
+        leaves = []
+        best_overall_scores = []
+        best_leaf_scores = []
+        max_leaf_scores = []
+        best_overall_std = []
+        best_leaf_std = []
+        max_leaf_std = []
+
+        # Print the best overall conditions used for this sensor
+        print(f"\n=== Sensor: {sensor} ===")
+        print("Best Overall Condition:")
+        print(best_overall_conditions)
+
+        # Print the best sensor-specific condition for this sensor
+        sensor_condition = best_sensor_conditions[best_sensor_conditions['Sensor'] == sensor].iloc[0]
+        print("Best Sensor Condition:")
+        print(sensor_condition)
+
+        # Get scores for each leaf
+        for leaf in df['Leaf'].unique():
+            # Filter for the current leaf and sensor combination
+            leaf_data = df[(df['Leaf'] == leaf) & (df['Sensor'] == sensor)]
+
+            # --- Best Overall Conditions ---
+            best_overall_cond = leaf_data[filter_data(leaf_data, best_overall_conditions)]['Score'].mean()
+            best_overall_cond_std = leaf_data[filter_data(leaf_data, best_overall_conditions)]['Score'].std()
+
+            # --- Best Sensor Conditions ---
+            best_sensor_cond = leaf_data[filter_data(leaf_data, sensor_condition)]['Score'].mean()
+            best_sensor_cond_std = leaf_data[filter_data(leaf_data, sensor_condition)]['Score'].std()
+
+            # --- Best Leaf Condition (Max Score for the Leaf) ---
+            best_leaf_cond = leaf_data.loc[leaf_data['Score'].idxmax()]
+            best_leaf_cond_score = best_leaf_cond['Score']
+
+            # Print the detailed conditions
+            print(f"\nLeaf: {leaf}")
+            print(f"Best Leaf Condition:")
+            print(best_leaf_cond.tolist())  # This prints the entire row including all relevant condition parameters
+
+            # Print the scores for each condition
+            print(f"Best Overall Score: {best_overall_cond}")
+            print(f"Best Sensor Score: {best_sensor_cond.tolist()}")
+            print(f"Best Leaf Score (Max): {best_leaf_cond_score}")
+
+            # Append data for plotting
+            leaves.append(leaf)
+            best_overall_scores.append(best_overall_cond)
+            best_leaf_scores.append(best_sensor_cond)
+            max_leaf_scores.append(best_leaf_cond_score)
+            best_overall_std.append(best_overall_cond_std)
+            best_leaf_std.append(best_sensor_cond_std)
+            max_leaf_std.append(leaf_data['Score'].std())
+
+        # Plot the bar graph
+        x = range(len(leaves))
+        bar_width = 0.2
+
+        bars1 = plt.bar(x, best_overall_scores, width=bar_width, label='Best Overall Conditions',
+                        align='center', yerr=best_overall_std, capsize=5)
+        bars2 = plt.bar([p + bar_width for p in x], best_leaf_scores, width=bar_width,
+                        label=f'Best {sensor} Conditions', align='center', yerr=best_leaf_std, capsize=5)
+        bars3 = plt.bar([p + 2 * bar_width for p in x], max_leaf_scores, width=bar_width,
+                        label='Max Leaf Condition', align='center', yerr=max_leaf_std, capsize=5)
+
+        # Add labels and title
+        plt.xticks([p + bar_width for p in x], leaves)
+        plt.ylabel('Score')
+        plt.title(f'Comparison of Best Conditions for {sensor} across Leaves')
+        plt.legend()
+
+        # Show the plot
+        plt.tight_layout()
+        plt.ylim([0.5, 1])
+        plt.show()
+
+def check_statistical_significance(df: pd.DataFrame) -> None:
+    """
+    Checks the statistical significance between the best leaf scores and the best overall condition scores
+    using Pingouin's ttest.
+
+    Parameters:
+    df (pd.DataFrame): DataFrame containing the scores and conditions.
+
+    Returns:
+    None
+    """
+    # Get the best conditions (both sensor and overall)
+    best_conditions = get_best_conditions()
+
+    # Extract the best overall condition from the returned dictionary
+    best_overall_condition = best_conditions['best_overall_conditions']
+
+    # Loop through each leaf
+    for leaf in df['Leaf'].unique():
+        # Filter the data for the current leaf
+        leaf_data = df[df['Leaf'] == leaf]
+
+        # Get the best score for the current leaf
+        best_leaf_score = leaf_data['Score'].max()
+
+        # Get the score for the best overall condition for comparison
+        # Assuming 'Score' is the column in the DataFrame returned for best overall condition
+        best_overall_score = best_overall_condition['Score'].mean()
+
+        # Prepare data for the paired t-test
+        # Create a DataFrame for pingouin ttest
+        comparison_data = pd.DataFrame({
+            'Best_Leaf_Score': leaf_data['Score'],
+            'Best_Overall_Score': [best_overall_score] * len(leaf_data)  # Repeat the best overall score
+        })
+
+        # Perform paired t-test using pingouin
+        ttest_results = pg.ttest(comparison_data['Best_Leaf_Score'], comparison_data['Best_Overall_Score'], paired=True)
+
+        # Extract the results
+        t_statistic = ttest_results['T'][0]
+        p_value = ttest_results['p-val'][0]
+
+        # Print the results
+        print(f"Leaf: {leaf}, Best Leaf Score: {best_leaf_score}, Best Overall Condition Score: {best_overall_score}")
+        print(f"T-Statistic: {t_statistic}, P-Value: {p_value}\n")
 
 
 if __name__ == '__main__':
     # make_anova_table_files()
+
+    if False:
+        # List of conditions to iterate over and generate plots for each
+        conditions_to_plot = ['LED Current', 'Integration Time', 'Measurement Type', 'Preprocess',
+                              'Cross Validation']
+
+        for condition in conditions_to_plot:
+            # Collect the best scores for each condition
+            condition_best_scores = collect_best_scores_for_each_condition(condition)
+
+            # Plot the performance for the current condition
+            plot_performance_for_condition(condition, condition_best_scores)
+    if False:
+        with PdfPages("best_results.pdf") as pdf:
+            for leaf in ALL_LEAVES:
+                for sensor in SENSORS:
+                    print(f"{leaf}: {sensor}")
+                    df = pd.read_csv(f"ANOVA_data/ANOVA_{leaf}_{sensor}.csv")
+
+                    # plot_scores_for_leaf_sensor(df, leaf, sensor, pdf=pdf)
+    # paiwise_ttests()
     # print_pg_anova_tables()
     # print_1_way_anova('Regression Model')
-    print_best_conditions()
+    best_conditions_dict = get_best_conditions()
+    print("Best Overall Sensor Conditions:\n", best_conditions_dict['best_sensor_conditions'])
+    print("\nBest Overall Conditions for All Leaves and Sensors:\n",
+          best_conditions_dict['best_overall_conditions'])
+    # print(best_sensor_conditions)
+    plot_leaf_vs_sensor_conditions_with_logging()
+    df = get_combined_anova_tables()
+    check_statistical_significance(df)
