@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 # installed libraries
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 plt.style.use("ggplot")
 
@@ -131,3 +132,14 @@ class CustomDict(dict):
                 self[key].append(value)
             else:
                 self[key] = [value]
+
+
+class GroupedData:
+    def __init__(self, x, y, group):
+        # Convert x, y, and group to pandas DataFrames/Series for consistency
+        self.x = pd.DataFrame(x) if not isinstance(x, pd.DataFrame) else x
+        self.y = pd.Series(y) if not isinstance(y, pd.Series) else y
+        self.group = pd.Series(group) if not isinstance(group, pd.Series) else group
+
+    def __repr__(self):
+        return f"GroupedData(x.shape={self.x.shape}, y.shape={self.y.shape}, group.shape={self.group.shape})"
