@@ -5,7 +5,7 @@ import tkinter as tk
 
 # installed libraries
 # local files
-import main_gui_old  # for type hinting
+# import main_gui_old  # for type hinting
 
 
 __author__ = 'Kyle Vitautas Lopin'
