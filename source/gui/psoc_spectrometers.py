@@ -14,57 +14,57 @@ import device_settings
 import main_gui_old
 import pyplot_embed
 import spectro_frame
-import usb_comm
+# import usb_comm
 
 __author__ = 'Kyle Vitautas Lopin'
 
 DEVICE_TYPE = "WiPy"
 
-class PSoC(object):
-    def __init__(self, master_app: tk.Tk):
-        self.master_app = master_app
-        usb_device = USB()
-        self.usb = usb_device.usb  # alias to easier attribute
-        self.sensors_list = self.usb.spectrometer
-        self.sensors = []
-        logging.debug("sensor list: {0}".format(self.sensors_list))
-        if self.sensors_list and "No Sensor" not in self.sensors_list[0]:
-            for sensor in self.sensors_list:
-                self.sensors.append(AS726X(self.usb, sensor, master_app))
+# class PSoC(object):
+#     def __init__(self, master_app: tk.Tk):
+#         self.master_app = master_app
+#         usb_device = USB()
+#         self.usb = usb_device.usb  # alias to easier attribute
+#         self.sensors_list = self.usb.spectrometer
+#         self.sensors = []
+#         logging.debug("sensor list: {0}".format(self.sensors_list))
+#         if self.sensors_list and "No Sensor" not in self.sensors_list[0]:
+#             for sensor in self.sensors_list:
+#                 self.sensors.append(AS726X(self.usb, sensor, master_app))
+#
+#     # def initialize_device(self, frame: spectro_frame.ColorSpectorFrame):
+#     #     if self.sensors:
+#     #         for sensor in self.sensors:
+#     #             sensor.set_gain(0)
+#     #             sensor.set_integration_time(1428)
+#     #             sensor.set_LED_power(False)
+#     #             sensor.set_LED_power(0)
 
-    # def initialize_device(self, frame: spectro_frame.ColorSpectorFrame):
-    #     if self.sensors:
-    #         for sensor in self.sensors:
-    #             sensor.set_gain(0)
-    #             sensor.set_integration_time(1428)
-    #             sensor.set_LED_power(False)
-    #             sensor.set_LED_power(0)
 
-
-class USB(object):
-    """ USB communication port to communicate with a microcontroller / PSoC with """
-    def __init__(self):
-        self.INFO_IN_ENDPOINT = 1
-        self.OUT_ENDPOINT = 2
-        self.DATA_IN_ENDPOINT = 3
-        self.USB_INFO_BYTE_SIZE = 32
-
-        # the data reading from the USB will be on a separate thread so that polling
-        # the USB will not make the program hang.
-        self.data_queue = queue.Queue()
-        self.data_acquired_event = threading.Event()
-        self.termination_flag = False  # flag to set when streaming data should be stopped
-
-        self.usb = usb_comm.PSoC_USB(self, self.data_queue, self.data_acquired_event,
-                                     self.termination_flag)
-
-    def data_process(self, *args):
-        print("original process_data")
-        pass
+# class USB(object):
+#     """ USB communication port to communicate with a microcontroller / PSoC with """
+#     def __init__(self):
+#         self.INFO_IN_ENDPOINT = 1
+#         self.OUT_ENDPOINT = 2
+#         self.DATA_IN_ENDPOINT = 3
+#         self.USB_INFO_BYTE_SIZE = 32
+#
+#         # the data reading from the USB will be on a separate thread so that polling
+#         # the USB will not make the program hang.
+#         self.data_queue = queue.Queue()
+#         self.data_acquired_event = threading.Event()
+#         self.termination_flag = False  # flag to set when streaming data should be stopped
+#
+#         self.usb = usb_comm.PSoC_USB(self, self.data_queue, self.data_acquired_event,
+#                                      self.termination_flag)
+#
+#     def data_process(self, *args):
+#         print("original process_data")
+#         pass
 
 
 class AS726X(object):
-    def __init__(self, usb_communication: USB, sensor_type, master_app):
+    def __init__(self, usb_communication, sensor_type, master_app):
         self.master = master_app  # type: main_gui_old.SpectrometerGUI
         self.usb = usb_communication
         self.sensor_type = sensor_type

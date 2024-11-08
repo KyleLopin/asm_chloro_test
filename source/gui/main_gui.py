@@ -12,7 +12,7 @@ import tkinter as tk
 import tkinter.font as tkFont
 from tkinter import ttk
 # installed libraries
-import numpy as np
+# import numpy as np
 # local files
 import arduino
 import AS726XX  # for type hinting
@@ -26,6 +26,7 @@ from matplotlib.figure import Figure
 
 # _font = tkFont.Font(family="Helvetica", size=24)
 # _font = tkFont.Font(family="Lucida Grande", size=24)
+
 
 class SpectralSensorGUI(tk.Tk):
     def __init__(self, parent=None):
