@@ -159,8 +159,7 @@ def get_data(sensor: str, leaf: str, measurement_mode: str,
 
     if measurement_mode == "absorbance":
         print("taking absorbance")
-        data = 1 / data
-        data = data.map(math.log10)
+        data = -np.log10(data)
 
     return data
 
