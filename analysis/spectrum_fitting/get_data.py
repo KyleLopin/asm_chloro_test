@@ -117,10 +117,6 @@ def get_x_y(sensor: str, leaf: str, measurement_type: str,
     groups = data["Leaf No."]
     x_data = data[x_columns]
 
-    if measurement_type == "absorbance":
-        print("taking absorbance")
-        x_data = 1 / x_data
-        x_data = x_data.map(math.log10)
     if send_leaf_numbers:
         return x_data, data[chloro_columns], groups
     else:
@@ -148,7 +144,7 @@ def get_data(sensor: str, leaf: str, measurement_mode: str,
         data_path = RAW_SPECTRUM_FOLDER
     elif measurement_mode == "reflectance":
         data_path = REFLECTANCE_SPECTRUM_FOLDER
-    elif measurement_mode == "absorbance":
+    elif measurement_mode == "absorbance":  # get reflectance and then calculate ab
         data_path = REFLECTANCE_SPECTRUM_FOLDER
     else:
         raise ValueError(f"type argument must be 'raw', 'absorbance' or 'reflectance, "
@@ -160,6 +156,11 @@ def get_data(sensor: str, leaf: str, measurement_mode: str,
         data = data.groupby(["Leaf No.", "integration time",
                              "led", "led current"], as_index=False
                             ).mean(numeric_only=True)
+
+    if measurement_mode == "absorbance":
+        print("taking absorbance")
+        data = -np.log10(data)
+
     return data
 
 
