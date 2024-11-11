@@ -1,3 +1,18 @@
+/*
+ * File: test_main.ino
+ * Purpose: Go through each current level allowed by the AS7265x sensor
+ * Author: Kyle Vitatuas Lopin
+ * Date: 11-11-2024
+ *
+ * Description:
+ *   - Connect an AS7265x sensor and Qwiic button to the arduino
+ *   - When the button is pressed the AS7265x will go through all 4 current levels (12.5, 25, 50, and 100 mA) and turn on the LED for 100 msecs
+ *
+ * Usage:
+ *   - Used to measure LED drive pin of the AS765x ICs to test if the voltage us above V_LED voltage specified by the datasheet
+ *
+ */
+
 #define print Serial.print
 #define println Serial.println
 #include "SparkFun_AS7265X.h"
