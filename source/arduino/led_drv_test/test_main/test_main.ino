@@ -25,7 +25,11 @@
 AS7265X as7265x;
 QwiicButton button;
 
-#define LED AS7265x_LED_IR
+uint8_t led_input = 0;
+String input = "";
+unsigned long previousMillis = 0;     // Stores last time LED was toggled
+const unsigned long ON_TIME = 100;    // LED on duration in milliseconds
+const unsigned long OFF_TIME = 50;    // LED off duration in milliseconds
 
 
 void setup() {
@@ -42,22 +46,48 @@ void setup() {
       ;
   }
   button.begin();
-  as7265x.disableBulb(LED);
 }
 
 
 void loop() {
+
+  if(Serial.available()){
+    input = Serial.readString();
+    print("got input: "); println(input);
+    led_input = input.charAt(0) - '0';  // Convert the string number to uint8_t
+    print("led set to: "); println(led_input);
+  }
+
+
   if (button.hasBeenClicked()) {
     println("pressed");
     button.clearEventBits();  // stop if from triggeing .hasBeenClicked() again
-
-    for (int k=0; k <=3; k++) { // loop through the 12.5, 25, 50, and 100 mA currents
-      as7265x.setBulbCurrent(k, LED);
-      as7265x.enableBulb(LED);
-      delay(100);
-      as7265x.disableBulb(LED);
-      delay(50);
-    }
+    run_led_scan(led_input);
   }
+
+}
+
+void run_led_scan(uint8_t led) {
+  int k = 0;
+  unsigned long next_step = millis();
+  as7265x.setBulbCurrent(k, led);  // Set the bulb current based on k
+  do {
+    as7265x.enableBulb(led);
+    next_step += ON_TIME;
+    
+    while (millis() < next_step) {
+      // wait
+    }
+
+    as7265x.disableBulb(led);
+    next_step += OFF_TIME;
+    // handle next step settings now
+    k++;
+    as7265x.setBulbCurrent(k, led);  // Set the bulb current based on k
+    
+    while (millis() < next_step) {
+      // wait
+    }
+  } while (k <= 3);
 
 }
