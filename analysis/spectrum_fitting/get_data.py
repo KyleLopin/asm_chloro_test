@@ -149,7 +149,7 @@ def get_data(sensor: str, leaf: str, measurement_mode: str,
     else:
         raise ValueError(f"type argument must be 'raw', 'absorbance' or 'reflectance, "
                          f"'{measurement_mode}' is not value")
-    filename = data_path / f"{leaf}_{sensor}.csv"
+    filename = data_path / f"{leaf}_{sensor}_data.csv"
     data = pd.read_csv(filename)
 
     if mean:
