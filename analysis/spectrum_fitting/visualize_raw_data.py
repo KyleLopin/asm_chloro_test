@@ -141,10 +141,17 @@ def visualize_raw_and_reflectance(save_filename: str = ""):
     sensors = ["as7262", "as7263", "as7265x", "as7265x"]
     leds = ["White LED", "White LED", "b'White'", "b'White IR'"]
     color_map, map_norm = make_color_map(0, 100)
+    conversion = 45  # counts to uW/cm^2
     for i, (sensor, led) in enumerate(zip(sensors, leds)):
         for j, mode in enumerate(["raw", "reflectance"]):
             x, y = get_data.get_x_y(sensor=sensor, leaf=leaf, measurement_type=mode, int_time=50,
                                     led=led, led_current="12.5 mA")
+            if sensor == "as7262":
+                conversion = 45
+            else:
+                conversion = 35  # AS7265x and AS7263 both have lower conversion number
+            if j == 0:
+                x = x / conversion
             y = y["Avg Total Chlorophyll (µg/cm2)"]
             # to plot the wavelenghts to scale convert to integers
             wavelengths = x.columns
@@ -166,7 +173,7 @@ def visualize_raw_and_reflectance(save_filename: str = ""):
         axs[3][z].set_xticks(ticks=x_wavelengths, labels=labels, rotation=60)
 
     # make axis labels
-    axs[0][2].ylabel("")
+    axs[2][0].set_ylabel(r"Reflected light intensity ($\frac{\mu W}{cm^2 \cdot s}$)", fontsize=12)
 
 
 def visualize_2_sensor_raw_data(save_filename: str = ""):
