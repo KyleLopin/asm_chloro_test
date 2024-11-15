@@ -27,7 +27,7 @@ from pathlib import Path
 import pandas as pd
 
 # DATA_FOLDER = Path.cwd().parent.parent / "data" / "chlorophyll_data" / "collected_data"
-DATA_FOLDER = Path(__file__).parent.parent.parent / "data" / "chlorophyll_data" / "collected_data"
+DATA_FOLDER = Path(__file__).parent.parent.parent / "data" / "chlorophyll" / "collected"
 
 
 def get_data(leaf: str, use_columns: tuple[str] = ("Total Chlorophyll (µg/cm2)",

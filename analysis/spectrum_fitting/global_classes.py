@@ -136,10 +136,14 @@ class CustomDict(dict):
 
 class GroupedData:
     def __init__(self, x, y, group):
-        # Convert x, y, and group to pandas DataFrames/Series for consistency
-        self.x = pd.DataFrame(x) if not isinstance(x, pd.DataFrame) else x
-        self.y = pd.Series(y) if not isinstance(y, pd.Series) else y
-        self.group = pd.Series(group) if not isinstance(group, pd.Series) else group
+        self.x = pd.DataFrame(x)
+        self.y = pd.Series(y)
+        self.group = pd.Series(group)
 
     def __repr__(self):
-        return f"GroupedData(x.shape={self.x.shape}, y.shape={self.y.shape}, group.shape={self.group.shape})"
+        # Print the full content of the x, y, and group attributes
+        return f"GroupedData(x=\n{self.x},\ny=\n{self.y},\ngroup=\n{self.group})"
+
+    def summary(self):
+        # Provide a brief summary of the dataset, similar to the original __repr__
+        return f"GroupedData: {len(self.x)} samples, {self.x.shape[1]} features, {self.group.nunique()} groups"

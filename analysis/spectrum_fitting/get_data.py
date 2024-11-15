@@ -17,8 +17,8 @@ import numpy as np
 import pandas as pd
 
 DATA_FOLDER = Path(__file__).parent.parent.parent / "data"
-RAW_SPECTRUM_FOLDER = DATA_FOLDER / "spectrum_data" / "raw_data"
-REFLECTANCE_SPECTRUM_FOLDER = DATA_FOLDER / "spectrum_data" / "reflectance_data"
+RAW_SPECTRUM_FOLDER = DATA_FOLDER / "spectrum" / "raw"
+REFLECTANCE_SPECTRUM_FOLDER = DATA_FOLDER / "spectrum" / "reflectance"
 ALL_LEAVES = ["mango", "banana", "jasmine", "rice", "sugarcane"]
 ALL_SENSORS = ["as7265x", "as7262", "as7263"]
 ALL_CHLORO = ['Avg Total Chlorophyll (µg/cm2)', 'Avg Chlorophyll a (µg/cm2)',

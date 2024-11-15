@@ -2,7 +2,7 @@
 
 """
 Make the figure to show how the led drive pin voltage is affected by the
-led current sink
+LED current sink
 """
 
 __author__ = "Kyle Vitautas Lopin"
@@ -12,6 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+FONTSIZE = 10
+plt.rcParams['font.family'] = 'Arial'
+plt.rcParams.update({'font.size': FONTSIZE})
 
 
 df = pd.read_excel("led_drv_pins.xlsx")
@@ -37,20 +40,31 @@ for i in range(0, 6, 2):  # Iterate over every other column for Time and Voltage
     aligned_times.append(aligned_time)
     aligned_voltages.append(voltage_series)
 
+
+plt.figure(figsize=(5, 3))  # Width, Height
 # Plot each aligned series
 for i in range(3):
     plt.plot(aligned_times[i], aligned_voltages[i], label=labels[i],
              color=colors[i])
 
+plt.text(-0.05, 1.1, "12.5 mA")
+plt.text(0.13, 1.1, "25 mA")
+plt.text(0.28, 1.1, "50 mA")
+plt.text(0.42, 1.1, "100 mA")
+
+
 # add line to show the cutoff line
-plt.axhline(0.3, ls='--', color='red', label="Cutoff line")
+plt.axhline(0.3, ls='--', color='red', label="sink voltage limit")
 
 plt.xlabel('Time (seconds)')
 plt.ylabel('Voltage (V)')
 # Place the legend on the right side of the plot
 plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-plt.title('LED drive pin voltage')
+# plt.legend()
+plt.title('LED sink pin voltage')
 plt.xlim([-0.1, 0.6])
+# Set the figure size in inches
+
 plt.tight_layout()
-plt.show()
-plt.savefig("led_drv_pin.eps")
+# plt.show()
+plt.savefig("led_drv_pin.pdf", format='pdf', dpi=300)

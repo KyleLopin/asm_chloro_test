@@ -24,10 +24,10 @@ ALL_LEAVES = tuple(("Mango", "Banana", "Jasmine", "Rice", "Sugarcane"))
 AXIS_LABEL_SIZE = 10
 LEGEND_FONT_SIZE = 9
 AX_TITLE_SIZE = 12
-R2_ANNOTATE_POSITION = (.55, .08)
-MAE_ANNOTATE_POSITION = (.53, .8)
+R2_ANNOTATE_POSITION = (.60, .08)
+MAE_ANNOTATE_POSITION = (.53, .7)
 FIGURE_LABEL_ANNOTATE_POSITION_L = (0.0, 1.05)
-FIGURE_LABEL_ANNOTATE_POSITION_R = (0.02, .88)
+FIGURE_LABEL_ANNOTATE_POSITION_R = (-0.1, 1.05)
 BIN_COUNTS = [0, 10, 20, 30, 40]
 BIN_Y_LIM = [0, 45]
 
@@ -246,9 +246,9 @@ def plot_individual_vs_avg(_df: pd.DataFrame,  ax: plt.Axes = None,
                        f"the name 'Avg [column_name]' that holds the averages")
 
     # make line for reference at the beginning, so it is in the back
-    data_range = [min(_df[column_name]), max(_df[column_name])]
+    data_range = [min(_df[f"Avg {column_name}"]), max(_df[f"Avg {column_name}"])]
     ax.plot(data_range, data_range, color='black', linestyle='--')
-
+    ax.set_xlim([0, 100])
     # get outliers
     df_pruned, outlier_idxs, _ = fix_outliers.remove_outliers(
         _df, column_name=column_name, column_sample_number="Leaf No.",
@@ -318,8 +318,8 @@ def display_r2(original_df: pd.DataFrame, ax: plt.Axes,
         original_df,  sigma_cutoff=3)
     x_pruned, y_pruned = get_x_y(df_pruned, column_name=column_name)
     r2_pruned = r2_score(x_pruned, y_pruned)
-    r2_string = f"r\u00B2 original = {r2_original:.3f}\n" \
-                f"r\u00B2 final = {r2_pruned:.3f}"
+    r2_string = f"r\u00B2 original = {r2_original:.2f}\n" \
+                f"r\u00B2 final = {r2_pruned:.2f}"
     ax.annotate(r2_string, R2_ANNOTATE_POSITION, xycoords='axes fraction')
 
 
@@ -359,7 +359,7 @@ def plot_both_leaf_graphs(_df: pd.DataFrame, axes: tuple[plt.Axes, plt.Axes] = N
     plot_individual_vs_avg(_df, axes[0], column_name=column_name)
     plot_histogram_residues(_df, axes[1], column_name=column_name,
                             display_range=max_range,
-                            title="Histogram of residues of measured\n"
+                            title="Residues of measured\n"
                                   "chlorophyll levels after removing outliers")
 
 
@@ -367,7 +367,6 @@ def plot_all_leaves(column_name: str = "Total Chlorophyll (µg/cm2)"):
     """ Make final figure to show chlorophyll levels"""
     _, axes = plt.subplots(5, 2, figsize=(7.5, 10))
     max_residue_range = get_residue_range()
-    print(f"max range: {max_residue_range}")
     _use_columns = ["Total Chlorophyll (µg/cm2)", "Spot", "Leaf No."]
     if column_name not in _use_columns:
         _use_columns.append(column_name)
@@ -379,21 +378,20 @@ def plot_all_leaves(column_name: str = "Total Chlorophyll (µg/cm2)"):
         data = fix_outliers.add_leave_averages(data, column_values_to_average=column_name)
         # plot the individual vs average plots
         plot_individual_vs_avg(data, axes[row][0], column_name=column_name,
-                               title=f"{leaf} leaves")
+                               title=f"{leaf}")
         # make figure numbers, i+1 for each row and (a) (b) for columns
-        axes[row][0].annotate(f"{row+1} a)", FIGURE_LABEL_ANNOTATE_POSITION_L,
-                              xycoords='axes fraction', fontsize=12)
+        axes[row][0].annotate(f"{chr(row+97)})", FIGURE_LABEL_ANNOTATE_POSITION_L,
+                              xycoords='axes fraction', fontsize=12, fontweight='bold')
         # if row != 0:  # the histogram title is on the top
-        axes[row][1].annotate("b)", FIGURE_LABEL_ANNOTATE_POSITION_R,
-                              xycoords='axes fraction', fontsize=12)
+        axes[row][1].annotate(f"{chr(row+102)})", FIGURE_LABEL_ANNOTATE_POSITION_R,
+                              xycoords='axes fraction', fontsize=12, fontweight='bold')
 
         # plot histograms
         if row == 0:  # add a title to the first graph
             plot_histogram_residues(data, axes[row][1],
                                     display_range=max_residue_range,
                                     column_name=column_name,
-                                    title="Histogram of residues of measured  \n"
-                                          "chlorophyll levels after removing outliers  ")
+                                    title="Residues after removing outliers")
         else:
             plot_histogram_residues(data, axes[row][1],
                                     display_range=max_residue_range)
@@ -402,10 +400,11 @@ def plot_all_leaves(column_name: str = "Total Chlorophyll (µg/cm2)"):
     # put legend on only the top graph,
     # mango is the best one to use as it has not points in the area
     axes[0][0].legend(fontsize=LEGEND_FONT_SIZE, frameon=False,
-                      loc='upper left')
+                      loc='upper left', bbox_to_anchor=(-.03, 1.06))
+    axes[0][0].set_ylim([0, 120])  # get a little more space for legend
     # set y-label only on the middle graph
     axes[2][0].set_ylabel("Individual Total Chlorophyll (µg/cm2)", size=AXIS_LABEL_SIZE)
-    axes[2][0].set_ylabel("Bin Counts", size=AXIS_LABEL_SIZE)
+    axes[2][1].set_ylabel("Bin Counts", size=AXIS_LABEL_SIZE)
     # put the x-label on the bottom
     axes[4][0].set_xlabel("Average Total Chlorophyll (µg/cm2)", size=AXIS_LABEL_SIZE)
     # put the x-label on the bottom of histogram graphs
@@ -423,7 +422,8 @@ if __name__ == '__main__':
     # plot_individual_vs_avg(data)
     # plot_histogram_residues(data, range=residue_range)
     # plot_both_leaf_graphs(data, max_range=residue_range)
-    plot_all_leaves(column_name='Chlorophyll b (µg/cm2)')
+    plot_all_leaves(column_name='Total Chlorophyll (µg/cm2)')
+    # plot_all_leaves(column_name='Chlorophyll b (µg/cm2)')
     plt.tight_layout()
     # plt.show()
-    plt.savefig("chlorophyll_r2_chl_b.svg")
+    plt.savefig("reference_chlorophyll_r2.pdf", format='pdf')
