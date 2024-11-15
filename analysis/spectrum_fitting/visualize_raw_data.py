@@ -20,14 +20,16 @@ import get_data
 plt.style.use('seaborn-v0_8')
 COLOR_MAP = 'Greens'  # options: Greens, YlGn
 COLOR_MAP_FROM_LIST = ["palegreen", "darkgreen"]
-INT_TIME = 100  # the integration time to display
-CURRENT = "25 mA"  # the current to use in the measurement to display
+INT_TIME = 50  # the integration time to display
+CURRENT = "12.5 mA"  # the current to use in the measurement to display
 COLOR_BAR_AXIS = [.90, .1, 0.02, 0.8]
 AS7265X_COLOR_BAR_AXIS = [.90, .25, 0.02, 0.5]
+SENSORS = ["AS7262", "AS7263", "AS7265x"]
 SUBPLOT_RIGHT_PAD = 0.87
 WIDTH_PADDING = 0.3
 REFLECTANCE_YLABEL = "% reflectance"
 RAW_DATA_YLABEL = "Counts (1000s)"
+FRUIT = "mango"
 # REFERENCES
 # AS7265x unique() leds: ["b'IR'", "b'UV IR'", "b'UV'", "b'White IR'",
 # "b'White UV IR'", "b'White UV'", "b'White'"]
@@ -66,7 +68,7 @@ def make_color_map(color_min: float, color_max: float
 
 
 def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
-                       leaf: str = "banana", led: str = "",
+                       leaf: str = FRUIT, led: str = "",
                        measurement_type: str = "reflectance") -> mpl.cm.ScalarMappable:
     """ Make a graph to visualize basic data, use this to test what is best for paper
 
@@ -119,6 +121,52 @@ def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
     # return the ScalarMappable that can be used to make a color bar
 
     return mpl.cm.ScalarMappable(norm=map_norm, cmap=color_map)
+
+
+def visualize_raw_and_reflectance(save_filename: str = ""):
+    """ Function to make figure for manuscript with the 4 sensor / LED conditions of
+    AS7262, AS7263, AS7265x + White LED, and AS7265x + White + IR LED on each row.
+    Display the raw data on the left column, and on the reflectance on the right column.
+    Align the wavelengths for the 3 sensors for visual effect
+
+    Args:
+        save_filename:
+
+    Returns:
+
+    """
+    leaf = "banana"
+    figure, axs = plt.subplots(nrows=4, ncols=2,
+                              sharex="col", figsize=(7.5, 10))
+    sensors = ["as7262", "as7263", "as7265x", "as7265x"]
+    leds = ["White LED", "White LED", "b'White'", "b'White IR'"]
+    color_map, map_norm = make_color_map(0, 100)
+    for i, (sensor, led) in enumerate(zip(sensors, leds)):
+        for j, mode in enumerate(["raw", "reflectance"]):
+            x, y = get_data.get_x_y(sensor=sensor, leaf=leaf, measurement_type=mode, int_time=50,
+                                    led=led, led_current="12.5 mA")
+            y = y["Avg Total Chlorophyll (µg/cm2)"]
+            # to plot the wavelenghts to scale convert to integers
+            wavelengths = x.columns
+            x_wavelengths = [int(wavelength.split()[0]) for wavelength in wavelengths]
+
+            # we want to color the lines on chlorophyll levels
+            lines = axs[i][j].plot(x_wavelengths, x.T, alpha=0.7)
+            # set the color of each line according to its chlorophyll level
+            for k, line in enumerate(lines):  # type: int, mpl.lines.Line2D
+                line.set_color(color_map(map_norm(y))[k])
+
+            # make mean line
+            axs[i][j].plot(x_wavelengths, x.mean(), color="black", label="mean")
+
+    skip_index = {1, 3, 5, 7, 10, 12}
+    labels = [wavelength if i not in skip_index else ''
+              for i, wavelength in enumerate(wavelengths)]
+    for z in [0, 1]:
+        axs[3][z].set_xticks(ticks=x_wavelengths, labels=labels, rotation=60)
+
+    # make axis labels
+    axs[0][2].ylabel("")
 
 
 def visualize_2_sensor_raw_data(save_filename: str = ""):
@@ -244,18 +292,19 @@ def visualize_as7265x_different_leds(leds: list[str], save_filename: str = ""):
 
 
 if __name__ == '__main__':
-    # if True:
+    if True:
+        visualize_raw_and_reflectance()
+
+    if False:
     #     visualize_2_sensor_raw_data(save_filename=
     #                                 "../../images/draft_spectrum/2_sensors_raw_data.svg")
     #
-    #     visualize_3_sensor_raw_data(save_filename=
-    #                                 "../../images/draft_spectrum/3_sensors_raw_data.svg")
+        visualize_3_sensor_raw_data()
     # else:
     #     visualize_2_sensor_raw_data()
     #     visualize_3_sensor_raw_data()
-    # if True:
-    #     visualize_as7265x_different_leds(leds=["b'UV'", "b'White'", "b'IR'"], save_filename=
-    #     "../../images/draft_spectrum/as7265x_raw_data_white_ir_uv.svg")
+    if False:
+        visualize_as7265x_different_leds(leds=["b'UV'", "b'White'", "b'IR'"])
     #     visualize_as7265x_different_leds(leds=["b'UV'", "b'IR'"], save_filename=
     #     "../../images/draft_spectrum/as7265x_raw_data_ir_uv.svg")
     # else:
