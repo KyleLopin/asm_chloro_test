@@ -1,9 +1,10 @@
 # Copyright (c) 2023 Kyle Lopin (Naresuan University) <kylel@nu.ac.th>
 
 """
+To make Figure 5 of manuscript use this function: visualize_raw_and_reflectance
+
 Make functions to visualize data from as7262, as7263 and as7265x color sensor data
 for the chlorophyll data.
-The 2 sensor graph needs better spacing still
 """
 
 __author__ = "Kyle Vitautas Lopin"
@@ -30,6 +31,7 @@ WIDTH_PADDING = 0.3
 REFLECTANCE_YLABEL = "% reflectance"
 RAW_DATA_YLABEL = "Counts (1000s)"
 FRUIT = "mango"
+plt.rcParams['font.family'] = 'Arial'
 # REFERENCES
 # AS7265x unique() leds: ["b'IR'", "b'UV IR'", "b'UV'", "b'White IR'",
 # "b'White UV IR'", "b'White UV'", "b'White'"]
@@ -52,12 +54,12 @@ def make_color_map(color_min: float, color_max: float
             - mpl.colors.Normalize: Normalization object for the colormap.
 
         Examples:
-        >>> data = get_data.get_data()
+        >>> x, y = get_data.get_x_y()
         >>> lines = plt.plot(x, y)
-        >>> color_map, map_norm = make_color_map(data["Avg Total Chlorophyll (µg/cm2)"].min(),
-        ...                                      data["Avg Total Chlorophyll (µg/cm2)"].max())
+        >>> color_map, map_norm = make_color_map(y["Avg Total Chlorophyll (µg/cm2)"].min(),
+        ...                                      y["Avg Total Chlorophyll (µg/cm2)"].max())
         >>> for i, line in enumerate(lines):  # type: int, mpl.lines.Line2D
-        ...     line.set_color(color_map(map_norm(data["Avg Total Chlorophyll (µg/cm2)"]))[i])
+        ...     line.set_color(color_map(map_norm(y["Avg Total Chlorophyll (µg/cm2)"]))[i])
 
     """
     color_map = mpl.colors.LinearSegmentedColormap.from_list(
@@ -110,9 +112,9 @@ def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
     # make color map
     color_map, map_norm = make_color_map(data["Avg Total Chlorophyll (µg/cm2)"].min(),
                                          data["Avg Total Chlorophyll (µg/cm2)"].max())
-    # print(color_map)
-    lines = ax.plot(x, x_data.T, alpha=0.7)
-    # cax = fig.add_axes([.9, 0.1, 0.05, 0.5])
+
+    # Ensure the 'lines' object is correctly typed as a list of Line2D objects
+    lines = ax.plot(x, x_data.T, alpha=0.7) # type: list[mpl.lines.Line2D]
     # set the color of each line according to its chlorophyll level
     for i, line in enumerate(lines):  # type: int, mpl.lines.Line2D
         line.set_color(color_map(map_norm(data["Avg Total Chlorophyll (µg/cm2)"]))[i])
@@ -123,29 +125,44 @@ def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
     return mpl.cm.ScalarMappable(norm=map_norm, cmap=color_map)
 
 
-def visualize_raw_and_reflectance(save_filename: str = ""):
+def visualize_raw_and_reflectance():
     """ Function to make figure for manuscript with the 4 sensor / LED conditions of
     AS7262, AS7263, AS7265x + White LED, and AS7265x + White + IR LED on each row.
     Display the raw data on the left column, and on the reflectance on the right column.
     Align the wavelengths for the 3 sensors for visual effect
 
-    Args:
-        save_filename:
-
     Returns:
+        None, show of save the figure in the function
 
     """
-    leaf = "banana"
+    leaf = FRUIT
     figure, axs = plt.subplots(nrows=4, ncols=2,
-                              sharex="col", figsize=(7.5, 10))
+                               sharex="col", figsize=(7, 8))
     sensors = ["as7262", "as7263", "as7265x", "as7265x"]
     leds = ["White LED", "White LED", "b'White'", "b'White IR'"]
     color_map, map_norm = make_color_map(0, 100)
+
     conversion = 45  # counts to uW/cm^2
     for i, (sensor, led) in enumerate(zip(sensors, leds)):
+        # add a-d on left figures
+        axs[i][0].annotate(f"{chr(i+97)})", (0.02, 0.95), xycoords='axes fraction',
+                           fontsize=12, fontweight='bold', va='top')
+        # add e-h on right side figures
+        axs[i][1].annotate(f"{chr(i + 101)})", (0.02, 0.95), xycoords='axes fraction',
+                           fontsize=12, fontweight='bold', va='top')
+        # add sensor names to figures
+        axs[i][0].annotate(f"AS{sensor[2:]}", (0.50, 0.90), xycoords='axes fraction',
+                           fontsize=12, fontweight='bold', va='top')
+        led_str = str(led)
+        if sensor == "as7265x":
+            led_str = led_str[2:-1].replace(" ", " + ") + " LED"
+        # add LED to figures
+        axs[i][0].annotate(f"{led_str}", (0.50, 0.75), xycoords='axes fraction',
+                           fontsize=12, fontweight='bold', va='top')
         for j, mode in enumerate(["raw", "reflectance"]):
             x, y = get_data.get_x_y(sensor=sensor, leaf=leaf, measurement_type=mode, int_time=50,
                                     led=led, led_current="12.5 mA")
+            print(x)
             if sensor == "as7262":
                 conversion = 45
             else:
@@ -153,7 +170,7 @@ def visualize_raw_and_reflectance(save_filename: str = ""):
             if j == 0:
                 x = x / conversion
             y = y["Avg Total Chlorophyll (µg/cm2)"]
-            # to plot the wavelenghts to scale convert to integers
+            # to plot the wavelengths to scale convert to integers
             wavelengths = x.columns
             x_wavelengths = [int(wavelength.split()[0]) for wavelength in wavelengths]
 
@@ -166,14 +183,46 @@ def visualize_raw_and_reflectance(save_filename: str = ""):
             # make mean line
             axs[i][j].plot(x_wavelengths, x.mean(), color="black", label="mean")
 
+    # 18 wavelengths is too much to show on the axis so skip some labels
     skip_index = {1, 3, 5, 7, 10, 12}
     labels = [wavelength if i not in skip_index else ''
               for i, wavelength in enumerate(wavelengths)]
+
     for z in [0, 1]:
+        # set the wavelength names at the ticks
         axs[3][z].set_xticks(ticks=x_wavelengths, labels=labels, rotation=60)
+        # tighten up the axis to remove the extra room in default adds
+        axs[3][z].set_xlim([410, 940])
 
     # make axis labels
-    axs[2][0].set_ylabel(r"Reflected light intensity ($\frac{\mu W}{cm^2 \cdot s}$)", fontsize=12)
+    # axs[2][0].set_ylabel(r"Reflected light intensity ($\frac{\mu W}{cm^2 \cdot s}$)", fontsize=12)
+    figure.text(0.04, 0.5, r"Light intensity ($\frac{\mu W}{cm^2 \cdot s}$)",
+                ha='center', va='center', rotation='vertical', fontsize=12)
+    # Add a y-axis label in the middle of the figure
+    figure.text(0.47, 0.5, 'Normalized Reflectance',
+                ha='center', va='center', rotation='vertical', fontsize=12)
+
+    # add column titles
+    axs[0][0].set_title("Raw reflected light intensity")
+    axs[0][1].set_title('Relative Reflectance')
+    figure.suptitle(f"{FRUIT.capitalize()} leaf reflectance")
+
+    # Apply tight_layout to automatically adjust subplot spacing
+    plt.tight_layout()
+
+    # Use subplots_adjust to add more space on the left side for the y-axis label
+    figure.subplots_adjust(left=0.1, wspace=0.22, right=0.87)  # Increase the left margin
+
+    # convert color_map from LinearSegmentedColormap to ScalarMappable
+    color_map = mpl.cm.ScalarMappable(norm=map_norm, cmap=color_map)
+    color_bar_axis = figure.add_axes(COLOR_BAR_AXIS)
+    color_bar = figure.colorbar(color_map, cax=color_bar_axis, orientation="vertical",
+                                fraction=0.08)
+    # Adjust the label padding (distance from the color bar)
+    color_bar.set_label(r'Total Chlorophyll ($\mu$g/cm$^2$)',
+                        labelpad=-1)  # Increase labelpad value as needed
+    # plt.show()
+    figure.savefig("Fig5.pdf", dpi=300, format='pdf')
 
 
 def visualize_2_sensor_raw_data(save_filename: str = ""):
@@ -317,4 +366,4 @@ if __name__ == '__main__':
     # else:
     #     visualize_as7265x_different_leds(leds=["b'UV'", "b'White'", "b'IR'"])
     #     visualize_as7265x_different_leds(leds=["b'UV'", "b'IR'"])
-    plt.show()
+    # plt.show()
