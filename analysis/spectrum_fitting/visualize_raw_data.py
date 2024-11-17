@@ -137,7 +137,7 @@ def visualize_raw_and_reflectance():
     """
     leaf = FRUIT
     figure, axs = plt.subplots(nrows=4, ncols=2,
-                               sharex="col", figsize=(7, 8))
+                               sharex="col", figsize=(7, 7))
     sensors = ["as7262", "as7263", "as7265x", "as7265x"]
     leds = ["White LED", "White LED", "b'White'", "b'White IR'"]
     color_map, map_norm = make_color_map(0, 100)
@@ -162,12 +162,11 @@ def visualize_raw_and_reflectance():
         for j, mode in enumerate(["raw", "reflectance"]):
             x, y = get_data.get_x_y(sensor=sensor, leaf=leaf, measurement_type=mode, int_time=50,
                                     led=led, led_current="12.5 mA")
-            print(x)
             if sensor == "as7262":
                 conversion = 45
             else:
                 conversion = 35  # AS7265x and AS7263 both have lower conversion number
-            if j == 0:
+            if j == 0:  # The raw reflectance saved counts, convert to uW per cm2 per second
                 x = x / conversion
             y = y["Avg Total Chlorophyll (µg/cm2)"]
             # to plot the wavelengths to scale convert to integers
