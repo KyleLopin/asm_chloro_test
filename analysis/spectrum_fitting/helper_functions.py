@@ -185,8 +185,8 @@ def predict_train_test_with_grouping(
 
 
 def evaluate_model_scores(x: pd.DataFrame, y: pd.Series,
-                          groups: pd.Series, n_splits=10,
-                          regressor=None, test_size=0.1,
+                          groups: pd.Series, regressor,
+                          n_splits=10, test_size=0.1,
                           group_by_mean=False):
     """
     Evaluate the regression model using GroupShuffleSplit and return statistical scores for both training and testing sets.
@@ -195,8 +195,8 @@ def evaluate_model_scores(x: pd.DataFrame, y: pd.Series,
         x (pd.DataFrame): Feature matrix.
         y (pd.Series): Target values.
         groups (pd.Series): Group labels corresponding to each data point.
+        regressor: The regression model to use
         n_splits (int): Number of times to perform the split and evaluate the model.
-        regressor: The regression model to use (if None, defaults to LinearRegression).
         test_size (float): Proportion of the dataset to include in the test split.
         group_by_mean (bool): Whether to group the predictions by the group labels and calculate the mean before scoring.
 
@@ -226,18 +226,19 @@ def evaluate_model_scores(x: pd.DataFrame, y: pd.Series,
         # Train and test data
         x_train, x_test = x[train_idx], x[test_idx]
         y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
-
         # Fit the regressor on the training data
-        if regressor is None:
-            from sklearn.linear_model import LinearRegression
-            regressor = LinearRegression()
 
-        regressor.fit(x_train, y_train)
+        # This part is too dangerous
+        # if regressor is None:
+        #     from sklearn.linear_model import LinearRegression
+        #     regressor = LinearRegression()
+        # else:
+        regressor = clone(regressor)
 
+        regressor.fit(x_train, y_train.iloc[:, 0])
         # Make predictions on the training and test data
         y_train_pred = regressor.predict(x_train)
         y_test_pred = regressor.predict(x_test)
-
         # Optionally group by the group labels and calculate the mean for each group
         if group_by_mean:
             # Convert predictions to pandas Series with the original group labels as the index
@@ -252,7 +253,6 @@ def evaluate_model_scores(x: pd.DataFrame, y: pd.Series,
         # Calculate R^2 score and Mean Absolute Error for training data
         train_r2 = r2_score(y_train, y_train_pred)
         train_mae = mean_absolute_error(y_train, y_train_pred)
-
         # Calculate R^2 score and Mean Absolute Error for test data
         test_r2 = r2_score(y_test, y_test_pred)
         test_mae = mean_absolute_error(y_test, y_test_pred)
