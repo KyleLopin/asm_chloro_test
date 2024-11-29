@@ -18,83 +18,27 @@ __author__ = "Kyle Vitautas Lopin"
 # standard libraries
 # for testing data
 import ssl
-ssl._create_default_https_context = ssl._create_unverified_context
 
 # installed libraries
+import matplotlib as mpl
+from matplotlib.gridspec import GridSpec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.base import RegressorMixin  # for type-hinting
 from sklearn.covariance import EmpiricalCovariance, MinCovDet
-from sklearn.decomposition import PCA
+from sklearn.cross_decomposition import PLSRegression
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import cross_validate, GroupShuffleSplit
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import PolynomialFeatures, RobustScaler, StandardScaler
 
 # local files
-import decomposition
 import get_data
-# noinspection PyUnresolvedReferences
-import preprocessors  # used in __main__ for testing
+import visualize_raw_data
+ssl._create_default_https_context = ssl._create_unverified_context
+# figure formatting constants
+COLOR_BAR_AXIS = [.90, .1, 0.02, 0.8]
 
-
-def view_pca_versus_robust_pca(x: pd.DataFrame):
-    pca_pipeline = Pipeline([('scalar', StandardScaler(with_std=False)),
-                             ('pca', PCA())])
-    robust_pipeline = Pipeline([('scalar', RobustScaler()),
-                                ('pca', PCA())])
-    pca_pipeline.fit(x)
-    plt.plot(pca_pipeline["pca"].components_[0], 'b',
-             label="PCA")
-    robust_cov = MinCovDet().fit(StandardScaler(with_std=False).fit_transform(x))
-    cov_matrix = robust_cov.covariance_
-
-    values, vectors = np.linalg.eig(cov_matrix)
-
-    sorted_values = np.argsort(values)[::-1]
-    sorted_vectors = vectors[:, sorted_values]
-    plt.plot(sorted_vectors[:, 0], 'r',
-             label="custom Robust PCA")
-
-    robust_pipeline.fit(x)
-    plt.plot(robust_pipeline["pca"].components_[0], 'g',
-             label="built in Robust PCA")
-
-
-def pca_linear_regr_vs_robust(x: pd.DataFrame,
-                              y: pd.Series,
-                              groups: pd.Series,
-                              n_comps: int = 2):
-    # fit a linear regression model to pca decomposed data
-    # pca_pipeline = Pipeline([('scalar', StandardScaler(with_std=False)),
-    #                          ('pca', PCA()),
-    #                          ("linear regression", LinearRegression())])
-    regr = LinearRegression
-    cv = GroupShuffleSplit(test_size=0.2, n_splits=100)
-    # regr = LassoCV
-    # pca_pipeline.fit(x, y)
-    x = PolynomialFeatures().fit_transform(x)
-    x_ss = StandardScaler(with_std=False).fit_transform(x)
-    # x_pca = PCA().fit_transform(x_ss)
-    x_pca = decomposition.pca(x_ss, n_components=n_comps)
-    scores = cross_validate(regr(), x_pca, y, cv=cv, groups=groups,
-                            return_train_score=True)
-    print("PCA regression")
-    print(scores['test_score'].mean(), scores['test_score'].std(),
-          scores['train_score'].mean(), scores['train_score'].std())
-    x_robust_pca = decomposition.pca(x_ss, n_components=n_comps,
-                                     robust=True)
-    scores = cross_validate(regr(), x_robust_pca, y, cv=cv, groups=groups,
-                            return_train_score=True)
-    print("robust PCA regression")
-    print(scores['test_score'].mean(), scores['test_score'].std(),
-          scores['train_score'].mean(), scores['train_score'].std())
-    print("linear regression")
-    scores = cross_validate(regr(), x, y, cv=cv, groups=groups,
-                            return_train_score=True)
-    print(scores['test_score'].mean(), scores['test_score'].std(),
-          scores['train_score'].mean(), scores['train_score'].std())
+SENSORS = ["as7262", "as7263", "as7265x"]
+ALL_LEAVES = ["banana", "jasmine", "mango", "rice", "sugarcane"]
 
 
 def remove_outliers_from_model(regressor: RegressorMixin,
@@ -103,7 +47,8 @@ def remove_outliers_from_model(regressor: RegressorMixin,
                                groups: pd.Series,
                                cutoff: float = 3.0,
                                remove_recursive: bool = False,
-                               verbose: bool = False
+                               verbose: bool = False,
+                               show_hist: bool = False,
                                ) -> tuple[pd.DataFrame, pd.Series,
                                           pd.Series]:
     """
@@ -123,6 +68,7 @@ def remove_outliers_from_model(regressor: RegressorMixin,
             no more outliers are found. Defaults to False.
         verbose (bool, optional): If True, print verbose output including statistics about outliers.
             Defaults to False.
+        show_hist (bool, optional): If True, plot the histogram of model residues
 
     Returns:
         tuple[pd.DataFrame, pd.Series, pd.Series]: A tuple containing the cleaned DataFrame 'x',
@@ -137,25 +83,25 @@ def remove_outliers_from_model(regressor: RegressorMixin,
         y_fit = regressor.predict(x)
         # # reset the index so you can calculate the averages
         y_fit = pd.Series(y_fit, index=x.index)
+
         # pass y_fit to to remove residue function
         residues = calculate_residues(y_fit, groups=groups)
+        plt.hist(residues)
+        plt.show()
 
-        # OLD WAY BELOW
-        # y_fit_avg = y_fit.groupby(by=y_fit.index).mean()
-        # # calculate the resides as averages, else the larger values will though off the results
-        # residues = (y_fit_avg - y_fit) / y_fit_avg
         cutoff_level = cutoff*residues.std()
         # remove any residues larger than cutoff
         outlier_mask = residues > cutoff_level  # type: pd.Series[bool]
         outlier_mask.index = x.index
         outliers = x.loc[outlier_mask]
+
         # drop outliers from all 3 groups
         x.drop(index=outliers.index, inplace=True)
         y.drop(index=outliers.index, inplace=True)
         groups.drop(index=outliers.index, inplace=True)
         if verbose:  # print out some basic statistics
-            print(f"residue std:  {residues.std():0.2f} with {outliers.shape[0]} outliers")
-            print(f"scores went from {initial_score:0.2f} to {regressor.score(x, y):0.2f}")
+            print(f"residue std:  {residues.std():0.3f} with {outliers.shape[0]} outliers")
+            print(f"scores went from {initial_score:0.3f} to {regressor.score(x, y):0.3f}")
         # return if not recursive or there are no outliers
         if not remove_recursive or outliers.shape[0] == 0:
             return x, y, groups
@@ -164,7 +110,7 @@ def remove_outliers_from_model(regressor: RegressorMixin,
 def mahalanobis_outlier_removal(x: pd.DataFrame,
                                 use_robust: bool = True,
                                 display_hist: bool = False,
-                                cutoff_limit: float = 3.0,
+                                cutoff_limit: float = 4.0,
                                 ) -> np.ndarray[bool]:
     """
         Remove outliers from a DataFrame based on Mahalanobis distance.
@@ -187,19 +133,16 @@ def mahalanobis_outlier_removal(x: pd.DataFrame,
     # calculate the mahalanobis distances
     # and calculate the cubic root to simulate a normal distribution
     mahal_distances = covariance.mahalanobis(x - covariance.location_)**0.33
-
     # shift the distribution to calculate the distance from the standard deviation easier
     shifted_mahal = mahal_distances - mahal_distances.mean()
     cutoff = cutoff_limit*shifted_mahal.std()
     data_mask = np.where((-cutoff < shifted_mahal) & (shifted_mahal < cutoff), True, False)
-    print(data_mask)
     if display_hist:
-        plt.hist(mahal_distances, bins=100)
-        plt.figure(2)
         plt.hist(shifted_mahal, bins=100)
         plt.axvline(cutoff, ls='--')
         print(f"outliers removed = {x.shape[0]-x[data_mask].shape[0]}")
         plt.show()
+    print(f"outliers removed = {x.shape[0] - x[data_mask].shape[0]}")
     return data_mask
 
 
@@ -244,49 +187,161 @@ def remove_outliers_from_residues(x, y, groups,
     residues = calculate_residues(x, groups)
     data_mask = mahalanobis_outlier_removal(residues)
     x = x[data_mask]
-    y = y[data_mask]
-    groups = groups[data_mask]
+    # y = y[data_mask]
+    # groups = groups[data_mask]
     if verbose:
         print(f"outliers removed = {initial_samples - x.shape[0]}")
         print(f"scores went from {initial_score:0.2f} to {regr_model.fit(x, y).score(x, y):0.2f}")
-    return x, y, groups
+    # return x, y, groups
+    return data_mask
+
+
+def vis_outlier():
+
+    for leaf in ["mango", "sugarcane"]:
+        for sensor in SENSORS:
+            led = "White LED"
+            if sensor == "as7265x":
+                led = "b'White IR'"
+
+            x, y, groups = get_data.get_x_y(sensor=sensor, int_time=50, led=led,
+                                            led_current="12.5 mA", leaf=leaf,
+                                            measurement_type="reflectance",
+                                            send_leaf_numbers=True)
+
+            # x = preprocessors.snv(x)
+            # index = x.index
+            # x = StandardScaler().fit_transform(x)
+            # x = pd.DataFrame(x, index=index)
+            # print(type(x))
+            residue_spectra = calculate_residues(x, groups)
+            data_mask = mahalanobis_outlier_removal(residue_spectra)
+            # data_mask = mahalanobis_outlier_removal(x)
+
+            print(pd.Series(data_mask).value_counts())
+            groups = groups[data_mask]
+            print('leaves left =', groups.nunique())
+            print(sensor, leaf)
+            plt.figure()
+            for idx in range(x.shape[0]):
+                color = 'green' if data_mask[idx] else 'red'
+                alpha = .1 if data_mask[idx] else 1.0
+                plt.plot(x.iloc[idx, :], color=color, alpha=alpha)
+                # plt.plot(x[idx, :], color=color, alpha=alpha)
+
+            plt.show()
+
+
+
+
+
+
+def make_manuscript_figure(leaf: str = "mango"):
+    """
+    Create a figure comparing outliers detected by Mahalanobis distance and Mahalanobis distance on the residues
+    across multiple sensors.
+
+    Args:
+        leaf (str): name of the string of the data to get
+
+    """
+
+    color_map, map_norm = visualize_raw_data.make_color_map(0, 100)
+
+    ###### INNER FUNCTION
+    def make_outlier_plot(x: pd.DataFrame, y: pd.Series,
+                          use_residue: bool, ax: plt.Axes,
+                          groups: pd.Series | None = None):
+        columns = x.columns
+        if use_residue:
+            residues = calculate_residues(x, groups)
+            mask = mahalanobis_outlier_removal(residues)
+        else:
+            mask = mahalanobis_outlier_removal(x)
+        wavelengths = x.columns
+        x_wavelengths = [int(wavelength.split()[0]) for wavelength in wavelengths]
+
+        for idx in range(x.shape[0]):
+            if mask[idx]:
+                color, alpha, z = color_map(map_norm(y.iloc[idx])), 0.3, 1
+            else:
+                # Determine the final color using the colormap based on y
+                color, alpha, z = 'red', 1.0, 2
+
+            ax.plot(x_wavelengths, x.iloc[idx, :],
+                            color=color, alpha=alpha, zorder=z)
+    ####### END INNER FUNCTION
+
+    # Create a figure
+    fig = plt.figure(figsize=(6, 8))
+
+    # Create GridSpec with 4 rows and 2 columns
+    gs = GridSpec(4, 2, figure=fig)
+
+    # Create subplots
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax3 = fig.add_subplot(gs[0, 1])
+    ax4 = fig.add_subplot(gs[1, 1])
+    ax5 = fig.add_subplot(gs[2, :])  # Merge row 3, columns 0 and 1
+    ax6 = fig.add_subplot(gs[3, :])  # Merge row 3, columns 0 and 1
+
+    for sensor in SENSORS:
+        led = "White LED"
+        if sensor == "as7265x":
+            led = "b'White IR'"
+        pls = PLSRegression(n_components=6)
+
+        x, y, groups = get_data.get_x_y(sensor=sensor, int_time=50, led=led,
+                                        led_current="12.5 mA", leaf=leaf,
+                                        measurement_type="reflectance",
+                                        send_leaf_numbers=True)
+        y = y["Avg Total Chlorophyll (µg/cm2)"]
+        wavelengths = x.columns
+        x_wavelengths = [int(wavelength.split()[0]) for wavelength in wavelengths]
+
+        if sensor == "as7262":  # DRY yourself, its late
+            # graph outliers based on Mahalanobis distances only
+            make_outlier_plot(x, y, use_residue=False, ax=ax1)
+            ax1.set_xticklabels([])
+            make_outlier_plot(x, y, use_residue=True, ax=ax2, groups=groups)
+            ax2.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=60)
+        elif sensor == 'as7263':
+            make_outlier_plot(x, y, use_residue=False, ax=ax3)
+            ax3.set_xticklabels([])
+            make_outlier_plot(x, y, use_residue=True, ax=ax4, groups=groups)
+            ax4.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=60)
+        elif sensor == "as7265x":
+            make_outlier_plot(x, y, use_residue=False, ax=ax5)
+            ax5.set_xticklabels([])
+            make_outlier_plot(x, y, use_residue=True, ax=ax6, groups=groups)
+            ax6.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=60)
+
+    # add color bar at end
+    color_map = mpl.cm.ScalarMappable(norm=map_norm, cmap=color_map)
+    color_bar_axis = fig.add_axes(COLOR_BAR_AXIS)
+    color_bar = fig.colorbar(color_map, cax=color_bar_axis, orientation="vertical",
+                                fraction=0.08)
+    # Adjust the label padding (distance from the color bar)
+    color_bar.set_label(r'Total Chlorophyll ($\mu$g/cm$^2$)',
+                        labelpad=-1)
+
+    # plt.tight_layout()
+    plt.show()
 
 
 if __name__ == '__main__':
-    _x, _y, _groups = get_data.get_x_y(sensor="as7262", int_time=150,
-                                       led_current="100 mA", leaf="banana",
-                                       measurement_type="reflectance",
-                                       send_leaf_numbers=True)
-    _y = _y['Avg Total Chlorophyll (µg/cm2)']
-    # print(LinearRegression().fit(_x, _y).score(_x, _y))
-    # _x, _y, _groups = remove_outliers_from_model(LinearRegression(),
-    #                                              _x, _y, _groups,
-    #                                              remove_recursive=True,
-    #                                              verbose=True)
-    # mahalanobis_outlier_removal(_x, display_hist=True)
-    # residue_spectra = calculate_residues(_x, _groups)
-    # data_mask = mahalanobis_outlier_removal(residue_spectra,
-    #                                         display_hist=True)
-    _x, _y, _groups = remove_outliers_from_residues(_x, _y, _groups, verbose=True)
-    _x = PolynomialFeatures(degree=2).fit_transform(_x)
-    model = LinearRegression().fit(_x, _y)
-    print(f"final poly score: {model.score(_x, _y)}")
-    # _x = _x[data_mask]
-    # _y = _y[data_mask]
-    # _groups = _groups[data_mask]
-    # print(LinearRegression().fit(_x, _y).score(_x, _y))
-    # print(trimmed_x.shape)
-    # plt.plot(residue_spectra.T)
-
-    # view_pca_versus_robust_pca(_x)
-    # Read data
-    # url = 'https://raw.githubusercontent.com/nevernervous78/nirpyresearch/master/data/milk.csv'
-    # data = pd.read_csv(url)
-    #
-    # # Assign spectra to the array X
-    # X = data.values[:, 2:].astype('float32')
-    # view_pca_versus_robust_pca(x=_x)
-    # pca_linear_regr_vs_robust(_x, _y, groups=_groups,
-    #                           n_comps=5)
-    #
-    # plt.show()
+    make_manuscript_figure("mango")
+    # vis_outlier()
+    # for sensor in SENSORS:
+    #     for leaf in ALL_LEAVES:
+    #         led = "White LED"
+    #         if sensor == "as7265x":
+    #             led = "b'White IR'"
+    #         _x, _y, _groups = get_data.get_x_y(
+    #             sensor=sensor, int_time=50, led_current="12.5 mA", leaf=leaf,
+    #             measurement_type="reflectance", send_leaf_numbers=True)
+    #         # nn(_x)
+    #         # _x = preprocessors.snv(_x)
+    #         residue_spectra = calculate_residues(_x, _groups)
+    #         mask = mahalanobis_outlier_removal(residue_spectra)
