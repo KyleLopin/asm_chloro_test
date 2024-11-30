@@ -276,15 +276,15 @@ def make_manuscript_figure(leaf: str = "mango"):
     fig = plt.figure(figsize=(6, 8))
 
     # Create GridSpec with 4 rows and 2 columns
-    gs = GridSpec(4, 2, figure=fig)
+    gs = GridSpec(5, 2, figure=fig, height_ratios=[1, 1, 0.2, 1, 1])
 
     # Create subplots
     ax1 = fig.add_subplot(gs[0, 0])
     ax2 = fig.add_subplot(gs[1, 0])
     ax3 = fig.add_subplot(gs[0, 1])
     ax4 = fig.add_subplot(gs[1, 1])
-    ax5 = fig.add_subplot(gs[2, :])  # Merge row 3, columns 0 and 1
-    ax6 = fig.add_subplot(gs[3, :])  # Merge row 3, columns 0 and 1
+    ax5 = fig.add_subplot(gs[3, :])  # Merge row 3, columns 0 and 1
+    ax6 = fig.add_subplot(gs[4, :])  # Merge row 3, columns 0 and 1
 
     for sensor in SENSORS:
         led = "White LED"
@@ -305,18 +305,25 @@ def make_manuscript_figure(leaf: str = "mango"):
             make_outlier_plot(x, y, use_residue=False, ax=ax1)
             ax1.set_xticklabels([])
             make_outlier_plot(x, y, use_residue=True, ax=ax2, groups=groups)
-            ax2.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=60)
+            ax2.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=45)
         elif sensor == 'as7263':
             make_outlier_plot(x, y, use_residue=False, ax=ax3)
             ax3.set_xticklabels([])
             make_outlier_plot(x, y, use_residue=True, ax=ax4, groups=groups)
-            ax4.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=60)
+            ax4.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=45)
         elif sensor == "as7265x":
             make_outlier_plot(x, y, use_residue=False, ax=ax5)
             ax5.set_xticklabels([])
             make_outlier_plot(x, y, use_residue=True, ax=ax6, groups=groups)
             ax6.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=60)
 
+    # label to each axis with a-f
+    for ax, letter in zip([ax1, ax2, ax3, ax4, ax5, ax6],
+                          ['a', 'b', 'c', 'd', 'e', 'f']):
+        pass
+
+    ax5.plot([], [], color='red', label="Outlier")
+    ax5.legend(loc="upper left")
     # add color bar at end
     color_map = mpl.cm.ScalarMappable(norm=map_norm, cmap=color_map)
     color_bar_axis = fig.add_axes(COLOR_BAR_AXIS)
@@ -325,6 +332,7 @@ def make_manuscript_figure(leaf: str = "mango"):
     # Adjust the label padding (distance from the color bar)
     color_bar.set_label(r'Total Chlorophyll ($\mu$g/cm$^2$)',
                         labelpad=-1)
+    fig.subplots_adjust(left=0.1, wspace=0.22, right=0.85, hspace=0.2)
 
     # plt.tight_layout()
     plt.show()
