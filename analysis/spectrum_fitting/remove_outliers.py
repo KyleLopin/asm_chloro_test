@@ -17,6 +17,7 @@ __author__ = "Kyle Vitautas Lopin"
 
 # standard libraries
 # for testing data
+import pickle
 import ssl
 
 # installed libraries
@@ -232,10 +233,6 @@ def vis_outlier():
             plt.show()
 
 
-
-
-
-
 def make_manuscript_figure(leaf: str = "mango"):
     """
     Create a figure comparing outliers detected by Mahalanobis distance and Mahalanobis distance on the residues
@@ -260,23 +257,25 @@ def make_manuscript_figure(leaf: str = "mango"):
             mask = mahalanobis_outlier_removal(x)
         wavelengths = x.columns
         x_wavelengths = [int(wavelength.split()[0]) for wavelength in wavelengths]
+        print('leaves left =', groups[mask].nunique())
 
         for idx in range(x.shape[0]):
             if mask[idx]:
                 color, alpha, z = color_map(map_norm(y.iloc[idx])), 0.3, 1
             else:
                 # Determine the final color using the colormap based on y
-                color, alpha, z = 'red', 1.0, 2
+                color, alpha, z = 'red', 0.8, 2
 
             ax.plot(x_wavelengths, x.iloc[idx, :],
-                            color=color, alpha=alpha, zorder=z)
+                            color=color, alpha=alpha, zorder=z, lw=1)
     ####### END INNER FUNCTION
 
     # Create a figure
     fig = plt.figure(figsize=(6, 8))
 
     # Create GridSpec with 4 rows and 2 columns
-    gs = GridSpec(5, 2, figure=fig, height_ratios=[1, 1, 0.2, 1, 1])
+    gs = GridSpec(5, 2,
+                  figure=fig, height_ratios=[1, 1, 0.2, 1, 1])
 
     # Create subplots
     ax1 = fig.add_subplot(gs[0, 0])
@@ -301,29 +300,50 @@ def make_manuscript_figure(leaf: str = "mango"):
         x_wavelengths = [int(wavelength.split()[0]) for wavelength in wavelengths]
 
         if sensor == "as7262":  # DRY yourself, its late
+            ax1.set_title("AS7262")
             # graph outliers based on Mahalanobis distances only
-            make_outlier_plot(x, y, use_residue=False, ax=ax1)
-            ax1.set_xticklabels([])
+            make_outlier_plot(x, y, use_residue=False, ax=ax1, groups=groups)
+            ax1.set_ylim([0.05, 0.55])
+            ax1.set_xticks(ticks=x_wavelengths, labels=[])
+
             make_outlier_plot(x, y, use_residue=True, ax=ax2, groups=groups)
-            ax2.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=45)
+            ax2.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=30)
+            ax2.set_ylim([0.05, 0.55])
+
         elif sensor == 'as7263':
-            make_outlier_plot(x, y, use_residue=False, ax=ax3)
-            ax3.set_xticklabels([])
+            ax3.set_title("AS7263")
+            make_outlier_plot(x, y, use_residue=False, ax=ax3, groups=groups)
+            ax3.set_xticks(ticks=x_wavelengths, labels=[])
             make_outlier_plot(x, y, use_residue=True, ax=ax4, groups=groups)
-            ax4.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=45)
+            ax4.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=30)
+            ax3.set_ylim([0.05, 1.1])
+            ax4.set_ylim([0.05, 1.1])
         elif sensor == "as7265x":
-            make_outlier_plot(x, y, use_residue=False, ax=ax5)
-            ax5.set_xticklabels([])
+            ax5.set_title("AS7265x", pad=-10)
+            make_outlier_plot(x, y, use_residue=False, ax=ax5, groups=groups)
+            ax5.set_xticks(ticks=x_wavelengths, labels=[])
+
             make_outlier_plot(x, y, use_residue=True, ax=ax6, groups=groups)
             ax6.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=60)
 
     # label to each axis with a-f
-    for ax, letter in zip([ax1, ax2, ax3, ax4, ax5, ax6],
-                          ['a', 'b', 'c', 'd', 'e', 'f']):
-        pass
+    for i, (ax, letter) in enumerate(zip([ax1, ax2, ax3, ax4, ax5, ax6],
+                                         ['a', 'b', 'c', 'd', 'e', 'f'])):
+        # weird \n are to align all text on top
+        condition = "Outliers\n(Spectrum)"
+        coords = [(0.02, .72), (0.11, .72)]
+        if i in [4, 5]:
+            coords = [(0.03, .72), (0.08, .72)]
+        if i % 2 == 1:  # odd numbers are calculated by residues
+            condition = "Outliers\n(Residues)"
+        ax.annotate(f"{letter})\n", coords[0], xycoords='axes fraction',
+                    fontsize=12)
+        ax.annotate(condition, coords[1], xycoords='axes fraction',
+                    fontsize=12)
+
 
     ax5.plot([], [], color='red', label="Outlier")
-    ax5.legend(loc="upper left")
+    ax5.legend(loc="lower right")
     # add color bar at end
     color_map = mpl.cm.ScalarMappable(norm=map_norm, cmap=color_map)
     color_bar_axis = fig.add_axes(COLOR_BAR_AXIS)
@@ -338,8 +358,76 @@ def make_manuscript_figure(leaf: str = "mango"):
     plt.show()
 
 
+def pickle_cleaned_dataset(output_filename="final_dataset.pkl"):
+    """
+    Process and clean the dataset by removing outliers using Mahalanobis distance
+    on residuals. The cleaned data is stored in a nested dictionary structure
+    and pickled for later use.
+
+    The structure of the final dataset:
+        data[sensor][leaf] = {
+            "x": pd.DataFrame,       # Cleaned feature data
+            "y": pd.Series,          # Corresponding target data
+            "groups": pd.Series      # Group information after masking
+        }
+
+    Parameters:
+    ----------
+    output_filename : str, optional
+        The name of the pickle file to save the cleaned data, by default 'final_dataset.pkl'.
+
+    Returns:
+    -------
+    None
+    """
+    # Initialize the data dictionary
+    data = {}
+
+    # Iterate over each sensor
+    for sensor in SENSORS:
+        data[sensor] = {}  # Create a sub-dictionary for the current sensor
+        led = "White LED"  # Default LED setting
+
+        # Adjust LED setting for specific sensor
+        if sensor == "as7265x":
+            led = "b'White IR'"
+
+        # Iterate over all leaves
+        for leaf in ALL_LEAVES:
+            # Retrieve x (features), y (target), and group information
+            x, y, groups = get_data.get_x_y(
+                sensor=sensor,
+                int_time=50,
+                led=led,
+                led_current="12.5 mA",
+                leaf=leaf,
+                measurement_type="reflectance",
+                send_leaf_numbers=True
+            )
+
+            # Calculate residuals for each group
+            residues = calculate_residues(x, groups)
+
+            # Apply Mahalanobis outlier removal on residuals
+            mask = mahalanobis_outlier_removal(residues)
+
+            # Store cleaned data in the dictionary
+            data[sensor][leaf] = {
+                "x": x[mask],  # Cleaned feature data
+                "y": y[mask],  # Cleaned target data
+                "groups": groups[mask]  # Cleaned group information
+            }
+
+    # Save the final dataset as a pickle file
+    with open(output_filename, "wb") as f:
+        pickle.dump(data, f)
+
+
 if __name__ == '__main__':
-    make_manuscript_figure("mango")
+    pickle_cleaned_dataset()
+    # plt.style.use('seaborn-v0_8-whitegrid')
+    #make_manuscript_figure("mango")
+
     # vis_outlier()
     # for sensor in SENSORS:
     #     for leaf in ALL_LEAVES:
