@@ -9,8 +9,8 @@ __author__ = "Kyle Vitautas Lopin"
 
 # standard libraries
 from functools import lru_cache
-import math
 from pathlib import Path
+import pickle
 
 # installed libraries
 import numpy as np
@@ -205,6 +205,64 @@ def get_data_slices(df: pd.DataFrame, selected_column: str,
     """
     new_df = df.loc[df[selected_column].isin(values)]
     return new_df
+
+
+def get_cleaned_data(sensor, leaf, pickle_file="final_dataset.pkl"):
+    """
+    Load cleaned data from a pickle file and retrieve the data for a specified sensor and leaf.
+    All data is the absorbance.
+
+    Parameters:
+    ----------
+    sensor : str
+        The name of the sensor (e.g., 'as7265x').
+    leaf : str
+        The identifier of the leaf (e.g., 'leaf1').
+    pickle_file : str, optional
+        The path to the pickle file containing the cleaned dataset,
+        by default 'final_dataset.pkl'.
+
+    Returns:
+    -------
+    tuple
+        A tuple (x, y, groups), where:
+        - x (pd.DataFrame): Feature data for the specified sensor and leaf.
+        - y (pd.Series): Target data for the specified sensor and leaf.
+        - groups (pd.Series): Group information for the specified sensor and leaf.
+
+    Raises:
+    -------
+    FileNotFoundError:
+        If the specified pickle file does not exist.
+    KeyError:
+        If the specified sensor or leaf is not in the dataset.
+    """
+    try:
+        # Load the pickled dataset
+        with open(pickle_file, "rb") as f:
+            data = pickle.load(f)
+
+        # Retrieve the data for the specified sensor and leaf
+        sensor_data = data.get(sensor)
+        if sensor_data is None:
+            raise KeyError(f"Sensor '{sensor}' not found in the dataset.")
+
+        leaf_data = sensor_data.get(leaf)
+        if leaf_data is None:
+            raise KeyError(f"Leaf '{leaf}' not found under sensor '{sensor}' in the dataset.")
+
+        # Extract x, y, and groups
+        x = leaf_data["x"]
+        y = leaf_data["y"]
+        groups = leaf_data["groups"]
+
+        return x, y, groups
+
+    except FileNotFoundError:
+        raise FileNotFoundError(f"The specified pickle file '{pickle_file}' does not exist.")
+    except KeyError as e:
+        raise e
+
 
 
 if __name__ == '__main__':
