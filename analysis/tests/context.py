@@ -11,6 +11,8 @@ import pathlib
 import sys
 
 test_file_folder = pathlib.Path().absolute().parent / "chlorophyll_measurements"
-sys.path.append(str(test_file_folder))
+spectrum_file_folder = pathlib.Path().absolute().parent / "spectrum_fitting"
 
-import analysis.chlorophyll_measurements
+sys.path.append(str(test_file_folder))
+sys.path.append(str(spectrum_file_folder))
+# import analysis.chlorophyll_measurements
