@@ -14,11 +14,12 @@ from functools import lru_cache
 
 # installed libraries
 import matplotlib as mpl
+from matplotlib.lines import Line2D  # for typehinting
 import matplotlib.pyplot as plt
 
 # local files
 import get_data
-plt.style.use('seaborn-v0_8')
+# plt.style.use('seaborn-v0_8')
 COLOR_MAP = 'Greens'  # options: Greens, YlGn
 COLOR_MAP_FROM_LIST = ["palegreen", "darkgreen"]
 INT_TIME = 50  # the integration time to display
@@ -57,12 +58,12 @@ def make_color_map(color_min: float, color_max: float
             - mpl.colors.Normalize: Normalization object for the colormap.
 
         Examples:
-        >>> x, y = get_data.get_x_y()
-        >>> lines = plt.plot(x, y)
-        >>> color_map, map_norm = make_color_map(y["Avg Total Chlorophyll (µg/cm2)"].min(),
-        ...                                      y["Avg Total Chlorophyll (µg/cm2)"].max())
-        >>> for i, line in enumerate(lines):  # type: int, mpl.lines.Line2D
-        ...     line.set_color(color_map(map_norm(y["Avg Total Chlorophyll (µg/cm2)"]))[i])
+            x, y = get_data.get_x_y(sensor="as7262", leaf="mango", measurement_type="reflectance")
+            lines = plt.plot(x, y)
+            color_map, map_norm = make_color_map(y["Avg Total Chlorophyll (µg/cm2)"].min(),
+                                                 y["Avg Total Chlorophyll (µg/cm2)"].max())
+            for i, line in enumerate(lines):  # type: int, mpl.lines.Line2D
+                line.set_color(tuple(color_map(map_norm(y["Avg Total Chlorophyll (µg/cm2)"]))[i]))
 
     """
     color_map = mpl.colors.LinearSegmentedColormap.from_list(
@@ -116,9 +117,9 @@ def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
     color_map, map_norm = make_color_map(data["Avg Total Chlorophyll (µg/cm2)"].min(),
                                          data["Avg Total Chlorophyll (µg/cm2)"].max())
 
-    lines = ax.plot(x, x_data.T, alpha=0.7)  # type: list[mpl.lines.Line2D]
+    lines = ax.plot(x, x_data.T, alpha=0.7)  # type: list[Line2D]
     # set the color of each line according to its chlorophyll level
-    for i, line in enumerate(lines):  # type: int, mpl.lines.Line2D
+    for i, line in enumerate(lines):  # type: int, Line2D
         line.set_color(color_map(map_norm(data["Avg Total Chlorophyll (µg/cm2)"]))[i])
     # make mean line
     ax.plot(x, x_data.mean(), color="black", label="mean")
@@ -128,12 +129,36 @@ def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
 
 
 def visualize_4_leaves_3_sensors():
+    """ Function to make manuscript figure 6
+
+        Visualize reflectance data for 4 different leaves and 3 sensors, generating
+        12 subplots in a 6x2 grid. Each plot represents the reflectance spectrum
+        for a specific leaf and sensor combination, with lines colored based on
+        chlorophyll levels.
+
+        Shared x-axes for wavelength and y-axes are scaled based on the sensor to better compare
+        the spectrum between sensors.
+        The color map for the  reflectance lines is based on the chlorophyll levels,
+        with mean lines displayed in black for each plot.
+        A color bar indicates the chlorophyll levels.
+
+        Returns:
+        --------
+        None
+            Displays the reflectance plots and adds a color bar, or saves the figure.
+            Use line comments to change between displaying or saving the figure.
+
+        Notes:
+        ------
+        - Reflectance is normalized and plotted for wavelengths 410 to 940 nm.
+        - Labels on the x-axis are selectively displayed to avoid clutter.
+        - The function dynamically adjusts subplot settings to optimize space.
+    """
     plt.style.use('seaborn-v0_8-bright')
     fig, axs = plt.subplots(6, 2, sharex="col",
                             figsize=(7.5, 8))
     # make a color map to color code the chlorophyll levels plotted
     color_map, map_norm = make_color_map(0, 100)
-
     j = 0
     # 4 leaves and 3 sensors so 12 graphs
     for i in range(12):
@@ -165,7 +190,7 @@ def visualize_4_leaves_3_sensors():
         wavelengths = x.columns
         x_wavelengths = [int(wavelength.split()[0]) for wavelength in wavelengths]
         # we want to color the lines on chlorophyll levels
-        lines = axs[i%6][j].plot(x_wavelengths, x.T, alpha=0.7)  # type: list[mpl.lines.Line2D]
+        lines = axs[i % 6][j].plot(x_wavelengths, x.T, alpha=0.7)  # type: list[mpl.lines.Line2D]
         # set the color of each line according to its chlorophyll level
         for k, line in enumerate(lines):  # type: int, mpl.lines.Line2D
             line.set_color(color_map(map_norm(y))[k])
@@ -174,6 +199,8 @@ def visualize_4_leaves_3_sensors():
 
     # 18 wavelengths is too much to show on the axis so skip some labels
     skip_index = {1, 3, 5, 7, 10, 12}
+    # wavelenghts and x_wavelengths are set to AS7265x sensor as that was the last
+    # sensor in the for loop
     labels = [wavelength if i not in skip_index else ''
               for i, wavelength in enumerate(wavelengths)]
     for z in [0, 1]:
@@ -185,7 +212,7 @@ def visualize_4_leaves_3_sensors():
 
     plt.tight_layout()
     fig.text(0.04, 0.5, 'Normalized Reflectance',
-                ha='center', va='center', rotation='vertical', fontsize=12)
+             ha='center', va='center', rotation='vertical', fontsize=12)
 
     # Use subplots_adjust to add more space on the left side for the y-axis label
     fig.subplots_adjust(left=0.1, right=0.87)
@@ -194,12 +221,12 @@ def visualize_4_leaves_3_sensors():
     color_map = mpl.cm.ScalarMappable(norm=map_norm, cmap=color_map)
     color_bar_axis = fig.add_axes(COLOR_BAR_AXIS)
     color_bar = fig.colorbar(color_map, cax=color_bar_axis, orientation="vertical",
-                                fraction=0.08)
+                             fraction=0.08)
     # Adjust the label padding (distance from the color bar)
     color_bar.set_label(r'Total Chlorophyll ($\mu$g/cm$^2$)',
                         labelpad=-1)
-    fig.savefig("Fig6.pdf", dpi=300, format='pdf')
-    # plt.show()
+    # fig.savefig("Fig6.pdf", dpi=300, format='pdf')
+    plt.show()
 
 
 def visualize_raw_and_reflectance():
@@ -219,7 +246,6 @@ def visualize_raw_and_reflectance():
     leds = ["White LED", "White LED", "b'White'", "b'White IR'"]
     color_map, map_norm = make_color_map(0, 100)
 
-    conversion = 45  # counts to uW/cm^2
     for i, (sensor, led) in enumerate(zip(sensors, leds)):
         # add a-d on left figures
         axs[i][0].annotate(f"{chr(i+97)})", (0.02, 0.95), xycoords='axes fraction',
@@ -429,13 +455,7 @@ if __name__ == '__main__':
         visualize_4_leaves_3_sensors()
 
     if False:
-    #     visualize_2_sensor_raw_data(save_filename=
-    #                                 "../../images/draft_spectrum/2_sensors_raw_data.svg")
-    #
         visualize_3_sensor_raw_data()
-    # else:
-    #     visualize_2_sensor_raw_data()
-    #     visualize_3_sensor_raw_data()
     if False:
         visualize_as7265x_different_leds(leds=["b'UV'", "b'White'", "b'IR'"])
     #     visualize_as7265x_different_leds(leds=["b'UV'", "b'IR'"], save_filename=
