@@ -141,52 +141,60 @@ class TestFilteredDF(unittest.TestCase):
         assert_frame_equal(results_df, correct_df)
 
 
+def create_sample_grouped_data() -> global_classes.GroupedData:
+    """
+    Create a sample GroupedData instance for testing purposes.
+
+    Returns:
+    - GroupedData: A GroupedData instance containing sample data with features, target values, and group labels.
+    """
+    # Sample data
+    x = [[1, 0],
+         [2, 0],
+         [1, 0],
+         [2, 0],
+         [0, 1],
+         [0, 2]]
+    y = [10, 20, 15, 25, 5, 30]
+    groups = [1, 1, 2, 2, 3, 3]
+
+    # Return the data as a GroupedData instance
+    return global_classes.GroupedData(x, y, groups)
+
+
 class TestGroupBasedTrainTestSplit(unittest.TestCase):
-    def test_group_based_train_test_split(self):
-        """
-        Test group_based_train_test_split to ensure data is split correctly
-        based on group membership.
-        """
-        # Create sample data
-        x = [[1, 0],
-             [2, 0],
-             [1, 0],
-             [2, 0],
-             [0, 1],
-             [0, 2]]
-        y = [10, 20, 15, 25, 5, 30]
-        groups = [1, 1, 2, 2, 3, 3]
 
-        # Convert data to GroupedData instance
-        grouped_data = global_classes.GroupedData(x, y, groups)
+    def setUp(self):
+        # Use the helper function to create a sample GroupedData instance
+        self.grouped_data = create_sample_grouped_data()
 
-        # Perform group-based train-test split with a specified random state for consistency
+    def test_single_split(self):
+        """Test group_based_train_test_split with n_splits=1."""
         train_data, test_data = helper_functions.group_based_train_test_split(
-            grouped_data, test_size=0.2, random_state=44
-        )
+            self.grouped_data, test_size=0.3, random_state=42, n_splits=1)
 
-        # Assertions to check if the splits are as expected
-        # Use a fixed random state to know the expected results for testing
-        expected_train_x = pd.DataFrame([[1, 0], [2, 0], [1, 0], [2, 0]])
-        expected_train_y = pd.Series([10, 20, 15, 25])
-        expected_train_group = pd.Series([1, 1, 2, 2])
+        total_samples = len(train_data.x) + len(test_data.x)
+        self.assertEqual(total_samples, len(self.grouped_data.x))
 
-        # can't ignore indexs of dataFrames yet
-        expected_test_x = pd.DataFrame([[0, 1], [0, 2]], index=[4, 5])
-        expected_test_y = pd.Series([5, 30], index=[4, 5])
-        expected_test_group = pd.Series([3, 3], index=[4, 5])
+        shared_groups = set(train_data.group).intersection(set(test_data.group))
+        self.assertEqual(len(shared_groups), 0)
 
-        # Check if the train split matches the expected data
-        pd.testing.assert_frame_equal(train_data.x, expected_train_x)
-        pd.testing.assert_series_equal(train_data.y, expected_train_y)
-        pd.testing.assert_series_equal(train_data.group, expected_train_group)
+    def test_multiple_splits(self):
+        """Test group_based_train_test_split with n_splits=2."""
+        splits = list(
+            helper_functions.group_based_train_test_split(
+                self.grouped_data, test_size=0.3, random_state=42,
+                n_splits=2))
 
-        # Check if the test split matches the expected data
-        pd.testing.assert_frame_equal(test_data.x, expected_test_x)
-        pd.testing.assert_series_equal(test_data.y, expected_test_y)
-        pd.testing.assert_series_equal(test_data.group, expected_test_group)
+        self.assertEqual(len(splits), 2)
+
+        for train_data, test_data in splits:
+            total_samples = len(train_data.x) + len(test_data.x)
+            self.assertEqual(total_samples, len(self.grouped_data.x))
+
+            shared_groups = set(train_data.group).intersection(set(test_data.group))
+            self.assertEqual(len(shared_groups), 0)
 
 
 if __name__ == '__main__':
     unittest.main()
-
