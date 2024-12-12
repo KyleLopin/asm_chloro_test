@@ -18,7 +18,9 @@ from matplotlib.lines import Line2D  # for typehinting
 import matplotlib.pyplot as plt
 
 # local files
+import remove_outliers
 import get_data
+
 # plt.style.use('seaborn-v0_8')
 COLOR_MAP = 'Greens'  # options: Greens, YlGn
 COLOR_MAP_FROM_LIST = ["palegreen", "darkgreen"]
@@ -110,6 +112,7 @@ def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
         if 'nm' in column:
             x_columns.append(column)
             x.append(int(column.split()[0]))
+    print(x_columns)
     x_data = data[x_columns]
     if measurement_type == 'raw':  # make the y labels smaller
         x_data = x_data / 1000
@@ -154,7 +157,7 @@ def visualize_4_leaves_3_sensors():
         - Labels on the x-axis are selectively displayed to avoid clutter.
         - The function dynamically adjusts subplot settings to optimize space.
     """
-    plt.style.use('seaborn-v0_8-bright')
+    plt.style.use('seaborn-v0_8')
     fig, axs = plt.subplots(6, 2, sharex="col",
                             figsize=(7.5, 8))
     # make a color map to color code the chlorophyll levels plotted
@@ -172,30 +175,46 @@ def visualize_4_leaves_3_sensors():
         #                        fontsize=12, fontweight='bold', va='top')
         axs[i % 6][j].annotate(f"{chr(i+97)}", (0.02, 0.92), xycoords='axes fraction',
                                fontsize=12, fontweight='bold', va='top')
+        sensor_coords = (0.65, 0.20)
         if sensor == "as7262":
             axs[i % 6][j].annotate(leaf.capitalize(), (0.65, 0.80), xycoords='axes fraction',
                                    fontsize=12, fontweight='bold', va='top')
-            print(i, j)
             axs[i % 6][j].set_ylim([0, 0.45])
         elif sensor == "as7265x":
             led = "b'White IR'"
             axs[i % 6][j].set_ylim([0, 0.68])
         else:
             axs[i % 6][j].set_ylim([0, 0.90])
+            # sensor_coords = (0.10, 0.20)
+        # add caption for each sensor
+        # axs[i % 6][j].annotate(f"AS{sensor[2:]}", sensor_coords, xycoords='axes fraction',
+        #                        fontsize=10, fontweight='bold', va='top')
 
-        axs[0][1].legend(loc='lower right')
-        x, y = get_data.get_x_y(sensor=sensor, leaf=leaf, measurement_type="reflectance",
-                                int_time=50, led=led, led_current="12.5 mA")
+        x, y, groups = get_data.get_x_y(sensor=sensor, leaf=leaf, measurement_type="reflectance",
+                                        int_time=50, led=led, led_current="12.5 mA",
+                                        send_leaf_numbers=True)
         y = y["Avg Total Chlorophyll (µg/cm2)"]
         wavelengths = x.columns
         x_wavelengths = [int(wavelength.split()[0]) for wavelength in wavelengths]
         # we want to color the lines on chlorophyll levels
-        lines = axs[i % 6][j].plot(x_wavelengths, x.T, alpha=0.7)  # type: list[mpl.lines.Line2D]
+        lines = axs[i % 6][j].plot(x_wavelengths, x.T, alpha=0.7, lw=1)  # type: list[mpl.lines.Line2D]
+        # TODO: How to find outliers and add here?
+        data_mask = remove_outliers.remove_outliers_from_residues(x, y, groups)
+        # print(data_mask)
         # set the color of each line according to its chlorophyll level
         for k, line in enumerate(lines):  # type: int, mpl.lines.Line2D
-            line.set_color(color_map(map_norm(y))[k])
+            if data_mask[k]:  # not outlier color code
+                line.set_color(color_map(map_norm(y))[k])
+                line.set_zorder(1)
+            else:
+                line.set_color("red")
+                line.set_zorder(2)
         # make mean line
         axs[i % 6][j].plot(x_wavelengths, x.mean(), color="black", label="Mean")
+        if i == 4:
+            # axs[i][0].plot([], [], color=color_map(map_norm(50)), label="Leaf Spectrum")
+            axs[i][0].plot([], [], color="red", label="Outlier")
+            axs[i][0].legend(loc='lower left', frameon=False)
 
     # 18 wavelengths is too much to show on the axis so skip some labels
     skip_index = {1, 3, 5, 7, 10, 12}
@@ -225,7 +244,7 @@ def visualize_4_leaves_3_sensors():
     # Adjust the label padding (distance from the color bar)
     color_bar.set_label(r'Total Chlorophyll ($\mu$g/cm$^2$)',
                         labelpad=-1)
-    # fig.savefig("Fig6.pdf", dpi=300, format='pdf')
+    fig.savefig("Fig_raw_data_w_outliers.pdf", dpi=300, format='pdf')
     plt.show()
 
 
@@ -436,6 +455,7 @@ def visualize_as7265x_different_leds(leds: list[str], save_filename: str = ""):
         color_map = visualize_raw_data(ax=axs[i, 1], sensor="as7265x", led=led,
                                        measurement_type="raw")
         axs[i, 1].set_ylabel(RAW_DATA_YLABEL)
+        axs[i, 1].set_ylim([0, .1])
     # make titles at top of columns
     axs[0, 0].set_title("Reflectance")
     axs[0, 1].set_title("Raw data counts")
@@ -456,8 +476,9 @@ if __name__ == '__main__':
 
     if False:
         visualize_3_sensor_raw_data()
-    if False:
-        visualize_as7265x_different_leds(leds=["b'UV'", "b'White'", "b'IR'"])
+    if Flase:
+        visualize_as7265x_different_leds(leds=["b'UV'", "b'White'"])
+        plt.show()
     #     visualize_as7265x_different_leds(leds=["b'UV'", "b'IR'"], save_filename=
     #     "../../images/draft_spectrum/as7265x_raw_data_ir_uv.svg")
     # else:
