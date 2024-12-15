@@ -6,12 +6,16 @@
 
 __author__ = "Kyle Vitautas Lopin"
 
+# standard libraries
+from pathlib import Path
+
 # installed libraries
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from sklearn.cross_decomposition import PLSRegression
+from sklearn.linear_model import LassoLarsIC
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 # local files
@@ -20,57 +24,172 @@ import helper_functions
 import preprocessors
 SENSORS = ["as7262", "as7263", "as7265x"]
 LEAVES = ["banana", "jasmine", "mango", "rice", "sugarcane"]
+pd.set_option('display.max_rows', 500)
+N_SPLITS = 10  # set to 400 for low variance, 10 to be quick
 
 
-def make_table():
+def create_validation_heatmaps():
+    """
+    Load data from an Excel file and create heatmaps for R2 and MAE.
+
+    Parameters:
+        excel_file (str): Path to the Excel file.
+        sheet_name (str): Name of the worksheet to load.
+
+    Returns:
+        None: Displays the heatmaps.
+    """
+    # Load data from the Excel file
+    # Construct the file path
+    base_path = Path(__file__).resolve().parents[2] / "data"
+    file_path = base_path / "data_for_tables.xlsx"
+    try:
+        data = pd.read_excel(file_path, sheet_name="validation scores")
+    except Exception as e:
+        print(f"Error loading file: {e}")
+        return
+    print(data)
+    r2_data = data.loc[:, ["r2", "as7262", "as7263", "as7265x"]]
+    mae_data = data.loc[:, ["mae", "as7262.1", "as7263.1", "as7265x.1"]]
+
+    # Rename columns for clarity
+    r2_data.columns = ["Leaf", "AS7262", "AS7263", "AS7265x"]
+    mae_data.columns = ["Leaf", "AS7262", "AS7263", "AS7265x"]
+
+    # Set the index to "Crop" for heatmaps
+    r2_data.set_index("Leaf", inplace=True)
+    mae_data.set_index("Leaf", inplace=True)
+    print(r2_data)
+    # Create heatmaps
+    fig, axes = plt.subplots(1, 2, figsize=(7, 3))
+
+    sns.heatmap(
+        r2_data,
+        annot=True,
+        fmt=".2f",
+        cmap="coolwarm",
+        cbar_kws={"label": "$R^2$"},
+        ax=axes[0]
+    )
+    axes[0].set_title("Validation $R^2$ Scores")
+
+    sns.heatmap(
+        mae_data,
+        annot=True,
+        fmt=".2f",
+        cmap="viridis",
+        cbar_kws={"label": "Mean Absolute Error\n(MAE) (µg/cm2)"},
+        ax=axes[1]
+    )
+    axes[1].set_title("Validation MAE Scores")
+    axes[1].set_ylabel("")
+    for i in [0, 1]:
+        axes[i].set_xlabel("Sensors")
+        axes[i].set_yticklabels(axes[i].get_yticklabels(), rotation=45)
+        axes[i].set_xticklabels(axes[i].get_xticklabels(), rotation=45)
+        axes[i].annotate(f"{chr(i + 97)})", (-0.4, 1.1), xycoords='axes fraction',
+                         fontsize=12, fontweight='bold', va='top')
+
+    # plt.tight_layout()
+    plt.subplots_adjust(wspace=0.52, bottom=0.2)
+    # fig.savefig("validation_scores.pdf", format='pdf')
+    plt.show()
+
+
+def make_table(sensors: list[str], use_fluro=False):
     # Initialize an empty list to store results
     results = []
 
     # Loop over each sensor and leaf combination
-    for sensor in SENSORS:
+    for sensor in sensors:
         for leaf in LEAVES:
+            print(sensor, leaf)
             # set the proper led for the sensor
             led = "White LED"
 
             if sensor == "as7262":
-                regressor = PLSRegression(n_components=6)
+                regressor = PLSRegression(n_components=5)
             elif sensor == "as7263":
                 regressor = PLSRegression(n_components=5)
             elif sensor == "as7265x":
                 led = "b'White IR'"
-                regressor = PLSRegression(n_components=16)
+                regressor = PLSRegression(n_components=10)
+                # regressor = LassoLarsIC("aic")
+                # regressor = ARDRegression(lambda_2=0.001)
+            elif sensor in ["as72651", "as72652", "as72653"]:
+                regressor = PLSRegression(n_components=5)
 
             # regressor = TransformedTargetRegressor(
             #     regressor=regressor, func=neg_log, inverse_func=neg_exp)
 
             # Get the data for the current sensor and leaf
-            x, y, groups = get_data.get_x_y(
-                sensor=sensor,
-                leaf=leaf,
-                measurement_type="reflectance",
-                led=led,
-                int_time=50,
-                led_current="12.5 mA",
-                send_leaf_numbers=True
-            )
-            # x = 1/x
-            # # process the data
-            # if sensor != "as7265x":
-            #     x = PolynomialFeatures(degree=2, include_bias=False
-            #                            ).fit_transform(x)
+            # x, y, groups = get_data.get_x_y(
+            #     sensor=sensor,
+            #     leaf=leaf,
+            #     measurement_type="absorbance",
+            #     led=led,
+            #     int_time=50,
+            #     led_current="12.5 mA",
+            #     send_leaf_numbers=True
+            # )
+            # x_fluro = None
+            # if sensor == "as7265x":
+            #     x_fluro, _, _ = get_data.get_x_y(
+            #             sensor=sensor,
+            #             leaf=leaf,
+            #             measurement_type="raw",
+            #             led="b'UV'",
+            #             int_time=150,
+            #             led_current="12.5 mA",
+            #             send_leaf_numbers=True
+            #         )
+            #     x, y, groups = get_data.get_x_y(
+            #         sensor=sensor,
+            #         leaf=leaf,
+            #         measurement_type="absorbance",
+            #         led="b'White IR'",
+            #         int_time=50,
+            #         led_current="12.5 mA",
+            #         send_leaf_numbers=True
+            #     )
+            if sensor in SENSORS:
+                x, y, groups = get_data.get_cleaned_data(sensor, leaf,
+                                                         mean=False)
+            else:
+                x, y, groups = get_data.get_cleaned_data("as7265x", leaf,
+                                                         mean=False)
+            if sensor == "as72651":
+                x = x[["610 nm", "680 nm", "730 nm", "760 nm", "810 nm", "860 nm"]]
+            elif sensor == "as72652":
+                x = x[["560 nm", "585 nm", "645 nm", "705 nm", "900 nm", "940 nm"]]
+            elif sensor == "as72653":
+                x = x[["410 nm", "435 nm", "460 nm", "485 nm", "510 nm", "535 nm"]]
+
+            x = StandardScaler().fit_transform(x)
+            # x = PolynomialFeatures(degree=2).fit_transform(x)
             y = y['Avg Total Chlorophyll (µg/cm2)']
+
+            # x = x.reset_index(drop=True)
+            # x_fluro = x_fluro.reset_index(drop=True)
+            # x['fluro1'] = x_fluro["680 nm"] - x_fluro["610 nm"]
+            # x['fluro2'] = x_fluro["730 nm"] - x_fluro["610 nm"]
+            # x['fluro3'] = x_fluro["680 nm"] / x_fluro["730 nm"]
             # Convert y to a pandas Series with groups as the index,
             # they need to have the same index
             y = pd.DataFrame({'y': y, 'group': groups})
             # reset the group to the y index
             y.set_index('group', inplace=True)
-
-            x = StandardScaler().fit_transform(x)
+            x = np.array(x)
+            # x = StandardScaler().fit_transform(x)
+            # x['fluro1'] = x_fluro["680 nm"] - x_fluro["610 nm"]
+            # x['fluro2'] = x_fluro["730 nm"] - x_fluro["610 nm"]
+            # x['fluro3'] = x_fluro["680 nm"] / x_fluro["730 nm"]
+            # print(x)
             # x = np.array(x)
             # Evaluate the scores for the current data
             scores = helper_functions.evaluate_model_scores(
-                x, y, groups, regressor=regressor, n_splits=100,
-                group_by_mean=True
+                x, y, groups, regressor=regressor, n_splits=N_SPLITS,
+                group_by_mean=False
             )
 
             results.append({
@@ -94,60 +213,60 @@ def make_table():
     print("\nMAE Scores Table:")
     print(pivot_df_mae)
     # plot_grouped_bar_charts(results_df)
-    plot_heatmaps(results_df)
+    r2_pivot = results_df.pivot(index='Leaf', columns='Sensor', values='R2')
+    mae_pivot = results_df.pivot(index='Leaf', columns='Sensor', values='MAE')
 
-    # Plot the R² scores as a heatmap
-    # plt.figure(figsize=(10, 6))
-    # sns.heatmap(pivot_df_r2, annot=True, fmt=".2f", cmap="viridis")
-    # plt.title("R² Scores by Leaf and Sensor")
-    # plt.ylabel("Leaf")
-    # plt.xlabel("Sensor")
-    # plt.show()
-    #
-    # # Plot the MAE scores as a heatmap
-    # plt.figure(figsize=(10, 6))
-    # sns.heatmap(pivot_df_mae, annot=True, fmt=".2f", cmap="viridis")
-    # plt.title("MAE Scores by Leaf and Sensor")
-    # plt.ylabel("Leaf")
-    # plt.xlabel("Sensor")
-    # plt.show()
+    plot_heatmaps(r2_pivot, mae_pivot)
 
 
-def plot_heatmaps(data, r2_col='R2', mae_col='MAE', sensor_col='Sensor', leaf_col='Leaf'):
+def plot_heatmaps(r2_data: pd.DataFrame, mae_data: pd.DataFrame, filename: str="") -> None:
     """
-    Plots two heatmaps side by side: one for R2 and one for MAE.
+    Plots two heatmaps side by side: one for R² and one for MAE.
 
-    Args:
-        data (pd.DataFrame): DataFrame containing the data to plot.
-        r2_col (str): Column name for R2 values.
-        mae_col (str): Column name for MAE values.
-        sensor_col (str): Column name for sensors.
-        leaf_col (str): Column name for leaves.
+    Parameters
+    ----------
+    r2_data : pd.DataFrame
+        DataFrame containing the R² values for the heatmap.
+    mae_data : pd.DataFrame
+        DataFrame containing the MAE values for the heatmap.
+    filename : str, optional
+        The name of the file to save the heatmaps as a PDF. If a falsy value
+        (e.g., "" or None) is provided, the heatmaps are not saved (default is "").
 
-    Returns:
-        None: Displays the plots.
+    Returns
+    -------
+    None
+        Displays the heatmaps and optionally saves them to a file.
     """
-    # Pivot data for heatmaps
-    r2_pivot = data.pivot(index=leaf_col, columns=sensor_col, values=r2_col)
-    mae_pivot = data.pivot(index=leaf_col, columns=sensor_col, values=mae_col)
-
     # Create subplots for the heatmaps
-    fig, axes = plt.subplots(1, 2, figsize=(6, 3), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(7, 3))
 
     # R2 Heatmap
-    sns.heatmap(r2_pivot, annot=True, fmt=".2f", cmap="coolwarm", ax=axes[0])
-    axes[0].set_title("R2 Heatmap")
-    axes[0].set_ylabel("Leaf")
-    axes[0].set_xlabel("Sensor")
+    sns.heatmap(r2_data, annot=True, fmt=".2f", cmap="coolwarm",
+                cbar_kws={"label": "$R^2$"}, ax=axes[0])
+    axes[0].set_title("Validation $R^2$ Scores")
 
     # MAE Heatmap
-    sns.heatmap(mae_pivot, annot=True, fmt=".2f", cmap="viridis", ax=axes[1])
-    axes[1].set_title("MAE Heatmap")
-    axes[1].set_xlabel("Sensor")
+    sns.heatmap(mae_data, annot=True, fmt=".2f", cmap="viridis",
+                cbar_kws={"label": "Mean Absolute Error\n(MAE) (µg/cm2)"},
+                ax=axes[1])
+    axes[1].set_title("Validation MAE Scores")
+    # axes[1].set_xlabel("Sensor")
+    axes[1].set_ylabel("")
+    for i in [0, 1]:
+        axes[i].set_xlabel("Sensors")
+        axes[i].set_yticklabels(axes[i].get_yticklabels(), rotation=45)
+        axes[i].set_xticklabels(axes[i].get_xticklabels(), rotation=45)
+        axes[i].annotate(f"{chr(i + 97)})", (-0.4, 1.1), xycoords='axes fraction',
+                         fontsize=12, fontweight='bold', va='top')
 
     # Adjust layout
-    plt.tight_layout()
+    # plt.tight_layout()
+    plt.subplots_adjust(left=0.15, wspace=0.52, bottom=0.2)
+    if filename:
+        fig.savefig("validation_scores.pdf", format='pdf')
     plt.show()
+
 
 def plot_grouped_bar_charts(data):
     """
@@ -218,4 +337,5 @@ def plot_grouped_bar_charts(data):
 
 
 if __name__ == '__main__':
-    make_table()
+    make_table(["as7265x", "as72651", "as72652", "as72653"])
+    # create_validation_heatmaps()
