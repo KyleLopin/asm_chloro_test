@@ -1,6 +1,23 @@
 # Copyright (c) 2024 Kyle Lopin (Naresuan University) <kylel@nu.ac.th>
 
 """
+This module provides functions for evaluating regression models and generating heatmaps
+for validation scores such as R² and MAE. The primary functionality includes loading
+sensor data, fitting models, calculating performance metrics, and visualizing results
+through heatmaps and grouped bar charts.
+
+Functions:
+- create_validation_heatmaps: Loads validation scores from an Excel file and generates
+  heatmaps for R² and MAE scores.
+- make_table: Evaluates regression models across different sensors and leaves, calculates
+  R² and MAE scores, and generates heatmaps for the results.
+- plot_heatmaps: Generates heatmaps for R² and MAE values, either displaying them or
+  saving to a file.
+- plot_grouped_bar_charts: Creates grouped bar charts displaying R² and MAE scores for
+  different leaves and sensor types.
+
+Dependencies:
+- matplotlib, numpy, pandas, seaborn, sklearn
 
 """
 
@@ -28,16 +45,26 @@ pd.set_option('display.max_rows', 500)
 N_SPLITS = 10  # set to 400 for low variance, 10 to be quick
 
 
-def create_validation_heatmaps():
+def create_validation_heatmaps(filename: str="") -> None:
     """
-    Load data from an Excel file and create heatmaps for R2 and MAE.
+    Load validation scores from an Excel file and create heatmaps for R² and MAE scores.
 
-    Parameters:
-        excel_file (str): Path to the Excel file.
-        sheet_name (str): Name of the worksheet to load.
+    Parameters
+    ----------
+    filename : str, optional
+        The name of the file to save the generated heatmaps as a PDF. If
+        a falsy value (e.g., an empty string), the heatmaps will not be saved (default is "").
 
-    Returns:
-        None: Displays the heatmaps.
+    Returns
+    -------
+    None
+        Displays the heatmaps. Optionally saves them to the specified file if `filename` is provided.
+
+    Notes
+    -----
+    - The function reads data from an Excel file named "data_for_tables.xlsx",
+      located in a "data" folder, in the "validation scores" sheet.
+    - Uses plot_heatmaps to display and optionally save file.
     """
     # Load data from the Excel file
     # Construct the file path
@@ -48,7 +75,6 @@ def create_validation_heatmaps():
     except Exception as e:
         print(f"Error loading file: {e}")
         return
-    print(data)
     r2_data = data.loc[:, ["r2", "as7262", "as7263", "as7265x"]]
     mae_data = data.loc[:, ["mae", "as7262.1", "as7263.1", "as7265x.1"]]
 
@@ -59,44 +85,39 @@ def create_validation_heatmaps():
     # Set the index to "Crop" for heatmaps
     r2_data.set_index("Leaf", inplace=True)
     mae_data.set_index("Leaf", inplace=True)
-    print(r2_data)
+    # print(r2_data)
+
     # Create heatmaps
-    fig, axes = plt.subplots(1, 2, figsize=(7, 3))
-
-    sns.heatmap(
-        r2_data,
-        annot=True,
-        fmt=".2f",
-        cmap="coolwarm",
-        cbar_kws={"label": "$R^2$"},
-        ax=axes[0]
-    )
-    axes[0].set_title("Validation $R^2$ Scores")
-
-    sns.heatmap(
-        mae_data,
-        annot=True,
-        fmt=".2f",
-        cmap="viridis",
-        cbar_kws={"label": "Mean Absolute Error\n(MAE) (µg/cm2)"},
-        ax=axes[1]
-    )
-    axes[1].set_title("Validation MAE Scores")
-    axes[1].set_ylabel("")
-    for i in [0, 1]:
-        axes[i].set_xlabel("Sensors")
-        axes[i].set_yticklabels(axes[i].get_yticklabels(), rotation=45)
-        axes[i].set_xticklabels(axes[i].get_xticklabels(), rotation=45)
-        axes[i].annotate(f"{chr(i + 97)})", (-0.4, 1.1), xycoords='axes fraction',
-                         fontsize=12, fontweight='bold', va='top')
-
-    # plt.tight_layout()
-    plt.subplots_adjust(wspace=0.52, bottom=0.2)
-    # fig.savefig("validation_scores.pdf", format='pdf')
-    plt.show()
+    plot_heatmaps(r2_data, mae_data, filename=filename)
 
 
-def make_table(sensors: list[str], use_fluro=False):
+def make_table(sensors: list[str], filename: str=None) -> None:
+    """
+        Evaluates regression models for a list of sensors across multiple leaves,
+        calculates R² and MAE scores, and generates heatmaps of the results.
+
+        Parameters
+        ----------
+        sensors : list of str
+            A list of sensor names to be evaluated (e.g., "as7262", "as7263").
+        filename : str, optional
+            The name of the file to save the generated heatmaps as a PDF. If
+            a falsy value (e.g., `None`), the heatmaps will not be saved (default is `None`).
+
+        Returns
+        -------
+        None
+            Displays R² and MAE pivot tables and generates heatmaps.
+            Optionally saves the heatmaps if `filename` is specified.
+
+        Notes
+        -----
+        - For each sensor and leaf combination, the function evaluates a regression model using
+          partial least squares regression (PLS) with specific configurations based on the sensor type.
+        - Data for each sensor and leaf is preprocessed and scaled before model evaluation.
+        - The results are stored in a DataFrame, which is then pivoted to create tables for R² and MAE scores.
+        - Heatmaps for R² and MAE are generated and displayed with the function plot_heatmaps.
+        """
     # Initialize an empty list to store results
     results = []
 
@@ -118,9 +139,6 @@ def make_table(sensors: list[str], use_fluro=False):
                 # regressor = ARDRegression(lambda_2=0.001)
             elif sensor in ["as72651", "as72652", "as72653"]:
                 regressor = PLSRegression(n_components=5)
-
-            # regressor = TransformedTargetRegressor(
-            #     regressor=regressor, func=neg_log, inverse_func=neg_exp)
 
             # Get the data for the current sensor and leaf
             # x, y, groups = get_data.get_x_y(
@@ -169,11 +187,6 @@ def make_table(sensors: list[str], use_fluro=False):
             # x = PolynomialFeatures(degree=2).fit_transform(x)
             y = y['Avg Total Chlorophyll (µg/cm2)']
 
-            # x = x.reset_index(drop=True)
-            # x_fluro = x_fluro.reset_index(drop=True)
-            # x['fluro1'] = x_fluro["680 nm"] - x_fluro["610 nm"]
-            # x['fluro2'] = x_fluro["730 nm"] - x_fluro["610 nm"]
-            # x['fluro3'] = x_fluro["680 nm"] / x_fluro["730 nm"]
             # Convert y to a pandas Series with groups as the index,
             # they need to have the same index
             y = pd.DataFrame({'y': y, 'group': groups})
@@ -216,7 +229,7 @@ def make_table(sensors: list[str], use_fluro=False):
     r2_pivot = results_df.pivot(index='Leaf', columns='Sensor', values='R2')
     mae_pivot = results_df.pivot(index='Leaf', columns='Sensor', values='MAE')
 
-    plot_heatmaps(r2_pivot, mae_pivot)
+    plot_heatmaps(r2_pivot, mae_pivot, filename=filename)
 
 
 def plot_heatmaps(r2_data: pd.DataFrame, mae_data: pd.DataFrame, filename: str="") -> None:
@@ -286,13 +299,13 @@ def plot_grouped_bar_charts(data):
     sensors = data['Sensor'].unique()
 
     # Set bar width and positions
-    barWidth = 0.25
+    bar_width = 0.25
     num_leaves = len(leaves)
     br_positions = [np.arange(num_leaves)]  # Base positions for the bars
 
     # Create positions for each sensor's bars
     for i in range(1, len(sensors)):
-        br_positions.append([x + barWidth for x in br_positions[i - 1]])
+        br_positions.append([x + bar_width for x in br_positions[i - 1]])
 
     # Initialize the figure and subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4))
@@ -303,13 +316,13 @@ def plot_grouped_bar_charts(data):
         r2_means = sensor_data['R2']
         r2_stds = sensor_data['R2 std']
 
-        ax1.bar(br_positions[idx], r2_means, yerr=r2_stds, width=barWidth,
+        ax1.bar(br_positions[idx], r2_means, yerr=r2_stds, width=bar_width,
                 edgecolor='grey', label=sensor, capsize=5)
 
     # Customize the first plot (R2)
     ax1.set_xlabel('Leaf Type', fontweight='bold', fontsize=12)
     ax1.set_ylabel('R2 Score', fontweight='bold', fontsize=12)
-    ax1.set_xticks([r + barWidth for r in range(len(leaves))])
+    ax1.set_xticks([r + bar_width for r in range(len(leaves))])
     ax1.set_xticklabels(leaves)
     ax1.set_title('R2 Scores by Leaf and Sensor', fontweight='bold', fontsize=14)
     ax1.set_ylim([.4, 1.0])
@@ -320,13 +333,13 @@ def plot_grouped_bar_charts(data):
         mae_means = sensor_data['MAE']
         mae_stds = sensor_data['MAE std']
 
-        ax2.bar(br_positions[idx], mae_means, yerr=mae_stds, width=barWidth,
+        ax2.bar(br_positions[idx], mae_means, yerr=mae_stds, width=bar_width,
                 edgecolor='grey', label=sensor, capsize=5)
 
     # Customize the second plot (MAE)
     ax2.set_xlabel('Leaf Type', fontweight='bold', fontsize=12)
     ax2.set_ylabel('MAE Score', fontweight='bold', fontsize=12)
-    ax2.set_xticks([r + barWidth for r in range(len(leaves))])
+    ax2.set_xticks([r + bar_width for r in range(len(leaves))])
     ax2.set_xticklabels(leaves)
     ax2.set_title('MAE Scores by Leaf and Sensor', fontweight='bold', fontsize=14)
     ax2.legend(title='Sensor', loc='upper right')
@@ -337,5 +350,5 @@ def plot_grouped_bar_charts(data):
 
 
 if __name__ == '__main__':
-    make_table(["as7265x", "as72651", "as72652", "as72653"])
-    # create_validation_heatmaps()
+    # make_table(["as7265x", "as72651", "as72652", "as72653"])
+    create_validation_heatmaps()
