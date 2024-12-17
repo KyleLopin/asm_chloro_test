@@ -235,8 +235,8 @@ def vis_outlier():
 
 def make_manuscript_figure(leaf: str = "mango"):
     """
-    Create a figure comparing outliers detected by Mahalanobis distance and Mahalanobis distance on the residues
-    across multiple sensors.
+    Create a figure comparing outliers detected by Mahalanobis distance and
+    Mahalanobis distance on the residues across multiple sensors.
 
     Args:
         leaf (str): name of the string of the data to get
@@ -249,7 +249,37 @@ def make_manuscript_figure(leaf: str = "mango"):
     def make_outlier_plot(x: pd.DataFrame, y: pd.Series,
                           use_residue: bool, ax: plt.Axes,
                           groups: pd.Series | None = None):
-        columns = x.columns
+        """
+        Generate a plot to visualize data and highlight outliers.
+
+        Parameters:
+        ----------
+        x : pd.DataFrame
+            Feature data where each row corresponds to a sample and each column
+            represents a wavelength or feature.
+        y : pd.Series
+            Target values (e.g., labels or intensities) corresponding to each sample in `x`.
+        use_residue : bool
+            If True, calculate outliers based on Mahalanobis distance of residuals.
+            If False, calculate outliers directly from `x`.
+        ax : plt.Axes
+            Matplotlib Axes object to plot the data.
+        groups : pd.Series, optional
+            Grouping information for samples, used when calculating residuals.
+            Defaults to None.
+
+        Notes:
+        -----
+        - Outliers are highlighted in red, while other data points are colored
+          based on their target values using a colormap.
+        - Residuals are calculated if `use_residue` is True, and groups are provided.
+
+        Returns:
+        -------
+        None
+            The plot is drawn on the provided `ax` object.
+        """
+
         if use_residue:
             residues = calculate_residues(x, groups)
             mask = mahalanobis_outlier_removal(residues)
@@ -296,35 +326,42 @@ def make_manuscript_figure(leaf: str = "mango"):
                                         measurement_type="reflectance",
                                         send_leaf_numbers=True)
         y = y["Avg Total Chlorophyll (µg/cm2)"]
-        wavelengths = x.columns
+        wavelengths = [w.split()[0] for w in x.columns]
         x_wavelengths = [int(wavelength.split()[0]) for wavelength in wavelengths]
 
+
+
         if sensor == "as7262":  # DRY yourself, its late
-            ax1.set_title("AS7262")
             # graph outliers based on Mahalanobis distances only
             make_outlier_plot(x, y, use_residue=False, ax=ax1, groups=groups)
-            ax1.set_ylim([0.05, 0.55])
             ax1.set_xticks(ticks=x_wavelengths, labels=[])
-
             make_outlier_plot(x, y, use_residue=True, ax=ax2, groups=groups)
             ax2.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=30)
-            ax2.set_ylim([0.05, 0.55])
+            ax2.set_xlabel("Wavelengths (nm)", fontsize=12)
 
         elif sensor == 'as7263':
-            ax3.set_title("AS7263")
             make_outlier_plot(x, y, use_residue=False, ax=ax3, groups=groups)
             ax3.set_xticks(ticks=x_wavelengths, labels=[])
             make_outlier_plot(x, y, use_residue=True, ax=ax4, groups=groups)
             ax4.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=30)
-            ax3.set_ylim([0.05, 1.1])
-            ax4.set_ylim([0.05, 1.1])
+            ax4.set_xlabel("Wavelengths (nm)", fontsize=12)
+
         elif sensor == "as7265x":
-            ax5.set_title("AS7265x", pad=-10)
             make_outlier_plot(x, y, use_residue=False, ax=ax5, groups=groups)
             ax5.set_xticks(ticks=x_wavelengths, labels=[])
-
             make_outlier_plot(x, y, use_residue=True, ax=ax6, groups=groups)
             ax6.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=60)
+            ax6.set_xlabel("Wavelengths (nm)", fontsize=12)
+
+    # set titles
+    ax1.set_title("AS7262")
+    ax3.set_title("AS7263")
+    ax5.set_title("AS7265x", pad=-10)
+    # set y limits
+    ax1.set_ylim([0.05, 0.55])
+    ax2.set_ylim([0.05, 0.55])
+    ax3.set_ylim([0.05, 1.1])
+    ax4.set_ylim([0.05, 1.1])
 
     # label to each axis with a-f
     for i, (ax, letter) in enumerate(zip([ax1, ax2, ax3, ax4, ax5, ax6],
@@ -339,8 +376,7 @@ def make_manuscript_figure(leaf: str = "mango"):
         ax.annotate(f"{letter})\n", coords[0], xycoords='axes fraction',
                     fontsize=12)
         ax.annotate(condition, coords[1], xycoords='axes fraction',
-                    fontsize=12)
-
+                    fontsize=10)
 
     ax5.plot([], [], color='red', label="Outlier")
     ax5.legend(loc="lower right")
@@ -348,14 +384,23 @@ def make_manuscript_figure(leaf: str = "mango"):
     color_map = mpl.cm.ScalarMappable(norm=map_norm, cmap=color_map)
     color_bar_axis = fig.add_axes(COLOR_BAR_AXIS)
     color_bar = fig.colorbar(color_map, cax=color_bar_axis, orientation="vertical",
-                                fraction=0.08)
+                             fraction=0.08)
+    # add y-axis labels
+    fig.text(0.46, 0.72, 'Normalized Reflectance',
+             ha='center', va='center', rotation='vertical', fontsize=12)
+    fig.text(0.03, 0.71, 'Normalized Reflectance',
+             ha='center', va='center', rotation='vertical', fontsize=12)
+    fig.text(0.03, 0.28, 'Normalized Reflectance',
+             ha='center', va='center', rotation='vertical', fontsize=12)
+
     # Adjust the label padding (distance from the color bar)
     color_bar.set_label(r'Total Chlorophyll ($\mu$g/cm$^2$)',
                         labelpad=-1)
-    fig.subplots_adjust(left=0.1, wspace=0.22, right=0.85, hspace=0.2)
+    fig.subplots_adjust(left=0.1, wspace=0.26, right=0.85, hspace=0.24)
 
     # plt.tight_layout()
     plt.show()
+    # fig.savefig("Outlier.pdf", dpi=300, format='pdf')
 
 
 def pickle_cleaned_dataset(output_filename="final_dataset.pkl"):
@@ -404,6 +449,8 @@ def pickle_cleaned_dataset(output_filename="final_dataset.pkl"):
                 measurement_type="reflectance",
                 send_leaf_numbers=True
             )
+            # convert x to absorbance
+            x = -np.log10(x)
 
             # Calculate residuals for each group
             residues = calculate_residues(x, groups)
@@ -424,9 +471,9 @@ def pickle_cleaned_dataset(output_filename="final_dataset.pkl"):
 
 
 if __name__ == '__main__':
-    pickle_cleaned_dataset()
+    # pickle_cleaned_dataset()
     # plt.style.use('seaborn-v0_8-whitegrid')
-    #make_manuscript_figure("mango")
+    make_manuscript_figure("rice")
 
     # vis_outlier()
     # for sensor in SENSORS:
