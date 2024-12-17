@@ -29,6 +29,7 @@ from sklearn.preprocessing import StandardScaler
 
 # local files
 import get_data
+import remove_outliers
 from stratified_group_shuffle_split import StratifiedGroupShuffleSplit
 
 
@@ -72,7 +73,7 @@ def make_anova_table_files():
         make_anova_table_file(sensor)
 
 
-def make_anova_table_file(sensor: str, cv_repeats = 10, repeats: int = 10):
+def make_anova_table_file(sensor: str, cv_repeats = 10, repeats: int = 5):
     """
     Generate an ANOVA table CSV file for a given sensor and leaf combinations
     by running Partial Least Squares (PLS) regression models with various
@@ -111,30 +112,41 @@ def make_anova_table_file(sensor: str, cv_repeats = 10, repeats: int = 10):
             int_times = [50, 100, 150]
             led = "b'White IR'"
         combinations = itertools.product(MEASUREMENT_TYPES, int_times, LED_CURRENTS)
-        for i in range(repeats):
-            for measure_type, int_time, current in combinations:
-                if sensor == "as7265x" and current == "100 mA":  # was not tested
-                    continue
-                x, y, groups = get_data.get_x_y(
-                    leaf=leaf, sensor=sensor,
-                    led=led,
-                    measurement_type=measure_type,
-                    int_time=int_time, led_current=current,
-                    send_leaf_numbers=True)
-                y = y["Avg Total Chlorophyll (µg/cm2)"]
 
-                # Further preprocessing based on the 'preprocess' parameter
-                regressor = PLSRegression(n_components=pls_n_comps[sensor][leaf])
+        for measure_type, int_time, current in combinations:
+            if sensor == "as7265x" and current == "100 mA":  # was not tested
+                continue
 
-                # Scaling the data
-                x_current = StandardScaler().fit_transform(x)
+            x, y, groups = get_data.get_x_y(
+                leaf=leaf, sensor=sensor,
+                led=led,
+                measurement_type=measure_type,
+                int_time=int_time, led_current=current,
+                send_leaf_numbers=True)
+            y = y["Avg Total Chlorophyll (µg/cm2)"]
+
+            # Calculate residuals for each group
+            residues = remove_outliers.calculate_residues(x, groups)
+
+            # Apply Mahalanobis outlier removal on residuals
+            mask = remove_outliers.mahalanobis_outlier_removal(residues)
+
+            x = x[mask]  # Cleaned feature data
+            y = y[mask]  # Cleaned target data
+            groups = groups[mask]  # Cleaned group information
+
+            # Further preprocessing based on the 'preprocess' parameter
+            regressor = PLSRegression(n_components=pls_n_comps[sensor][leaf])
+
+            # Scaling the data
+            x_current = StandardScaler().fit_transform(x)
+
+            for i in range(repeats):
 
                 # Predict using cross-validation
                 scores = cross_val_score(
                     regressor, x_current, y, groups=groups, cv=cv,
                     scoring=SCORE)
-                print(scores)
-                print(type(scores))
                 # Append the results
                 results.append({
                     "Leaf": leaf,
@@ -143,6 +155,8 @@ def make_anova_table_file(sensor: str, cv_repeats = 10, repeats: int = 10):
                     "LED Current": current,
                     "Score": scores.mean()
                 })
+                print(f"i = {i}", repeats)
+                print(len(results))
 
     # Create a DataFrame from the results and save it to a CSV file
     results_df = pd.DataFrame(results)
@@ -180,6 +194,8 @@ def print_pg_anova_table(sensor: str):
     df = pd.read_csv(filename)
     print(df)
     print(df["LED Current"].unique())
+    print(df['Score'].min())
+    print(df['Score'].max())
     # Perform the ANOVA test
     aov = pg.anova(dv='Score',
                    between=['Leaf', 'Measurement Type', 'Integration Time', 'LED Current'],
@@ -205,7 +221,29 @@ def print_pg_anova_table(sensor: str):
     filtered_aov.to_csv(output_filename, index=False)
 
 
-def make_box_plots(sensor):
+def make_box_plots(sensor: str) -> None:
+    """
+    Generate violin plots for model performance scores by varying 'LED Current',
+    'Integration Time', and 'Measurement Type' under the best conditions.
+
+    Parameters
+    ----------
+    sensor : str
+        The name of the sensor used to filter the input data (e.g., 'as7262', 'as7265x').
+
+    Returns
+    -------
+    None
+        Displays the violin plots for three parameter variations.
+
+    Notes
+    -----
+    The function reads the preprocessed ANOVA table data for the given sensor
+    from a CSV file and generates three violin plots:
+    1. Varying 'LED Current' with fixed 'Integration Time' and 'Measurement Type'.
+    2. Varying 'Integration Time' with fixed 'LED Current' and 'Measurement Type'.
+    3. Varying 'Measurement Type' with fixed 'LED Current' and 'Integration Time'.
+    """
     df = pd.read_csv(f"ANOVA_data/ANOVA_{sensor}.csv")
     # Create a figure with 3 subplots
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))  # 1 row, 3 columns
@@ -214,21 +252,29 @@ def make_box_plots(sensor):
     best_int_time = 50
     best_measure_type = "absorbance"
 
-    print(df)
-    print(df.min())
+
     def plot_boxplots(df, axes):
         """
-        Plot boxplots for 'LED Current', 'Integration Time', and 'Measurement Type'.
+        Plot violin plots for 'LED Current', 'Integration Time', and 'Measurement Type'
+        based on the filtered DataFrame under predefined best conditions.
 
-        Parameters:
-            df (pd.DataFrame): The data containing 'LED Current', 'Integration Time',
-                               'Measurement Type', and 'Score'.
-            axes (list): A list of matplotlib Axes objects for the 3 boxplots.
+        Parameters
+        ----------
+        df : pd.DataFrame
+            The input DataFrame containing columns: 'LED Current', 'Integration Time',
+            'Measurement Type', and 'Score'.
+        axes : list[plt.Axes]
+            A list of matplotlib Axes objects where the plots will be drawn.
+
+        Returns
+        -------
+        None
+            The function modifies the provided axes to display the plots.
         """
         # Plot 1: Vary 'LED Current'
         df_led = df[(df['Integration Time'] == best_int_time) &
                     (df['Measurement Type'] == best_measure_type)]
-        print(df_led)
+
         sns.violinplot(data=df_led, x='LED Current', y='Score', ax=axes[0])
         axes[0].set_title("Score by LED Current")
         axes[0].set_xlabel("LED Current")
@@ -249,13 +295,11 @@ def make_box_plots(sensor):
         axes[2].set_xlabel("Measurement Type")
         for i in range(3):
             axes[i].set_ylim([0, 1])
-
             axes[i].set_ylabel("Score")
 
     # Call the inner function with your DataFrame and axes
     plot_boxplots(df, axes)
     plt.show()
-
 
 
 def plot_scores_for_leaf_sensor(df, leaf, sensor, pdf=None):
@@ -809,9 +853,9 @@ def perform_anova_and_tukey_test(df: pd.DataFrame, factor: str, sensor: str = No
 
 if __name__ == '__main__':
     # make_anova_table_files()
-    # print_pg_anova_table('as7263')
+    # print_pg_anova_table('as7262')
     make_box_plots("as7262")
-    ham
+
     if True:
         # List of conditions to iterate over and generate plots for each
         conditions_to_plot = ['LED Current', 'Integration Time', 'Measurement Type']
@@ -830,7 +874,7 @@ if __name__ == '__main__':
                     _df = pd.read_csv(f"trash/ANOVA_data/ANOVA_{_leaf}_{_sensor}.csv")
 
                     # plot_scores_for_leaf_sensor(df, leaf, sensor, pdf=pdf)
-    ham
+
     # paiwise_ttests()
     # print_pg_anova_tables()
     # print_1_way_anova('Regression Model')
