@@ -14,18 +14,23 @@ import warnings
 
 # installed libraries
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 import pandas as pd
 import pingouin as pg
+import seaborn as sns
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.exceptions import DataConversionWarning
 from sklearn.linear_model import ARDRegression, HuberRegressor, LassoLarsIC, LinearRegression
-from sklearn.model_selection import cross_val_score, GroupKFold, GroupShuffleSplit
-from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+
+from sklearn.metrics import r2_score
+from sklearn.model_selection import (cross_val_predict, cross_val_score,
+                                     GroupKFold, GroupShuffleSplit)
+from sklearn.preprocessing import StandardScaler
 
 # local files
 import get_data
+from stratified_group_shuffle_split import StratifiedGroupShuffleSplit
+
 
 warnings.filterwarnings(action='ignore', category=DataConversionWarning)
 LED_CURRENTS = ["12.5 mA", "25 mA", "50 mA", "100 mA"]
@@ -33,7 +38,10 @@ INT_TIMES = [50, 100, 150, 200, 250]
 ALL_LEAVES = ["mango", "banana", "jasmine", "rice", "sugarcane"]
 MEASUREMENT_TYPES = ["raw", "reflectance", "absorbance"]
 SENSORS = ["as7262", "as7263", "as7265x"]
-PREPROCESS = ["Poly", "No Poly"]
+pls_n_comps = {"as7262": {"banana": 5, "jasmine": 4, "mango": 5, "rice": 6, "sugarcane": 5},
+               "as7263": {"banana": 5, "jasmine": 5, "mango": 5, "rice": 5, "sugarcane": 6},
+               "as7265x": {"banana": 8, "jasmine": 14, "mango": 11, "rice": 6, "sugarcane": 6}}
+
 SCORE = "r2"
 
 regression_models_2_3 = {
@@ -59,95 +67,90 @@ cvs = {
 
 
 def make_anova_table_files():
-    """ make .csv file for each sensor and leaf to run ANOVA analysis on"""
-    for leaf in ALL_LEAVES:
-        for sensor in SENSORS:
-            make_anova_table_file(leaf, sensor)
+    """ make .csv file for each sensor to run ANOVA analysis on"""
+    for sensor in SENSORS:
+        make_anova_table_file(sensor)
 
 
-def make_anova_table_file(leaf: str, sensor: str):
+def make_anova_table_file(sensor: str, cv_repeats = 10, repeats: int = 10):
     """
-    Generate an ANOVA table file for a given leaf and sensor combination by
-    running a set of regression models with various parameter combinations.
+    Generate an ANOVA table CSV file for a given sensor and leaf combinations
+    by running Partial Least Squares (PLS) regression models with various
+    parameter settings.
 
-    This function performs the following steps:
-    1. Defines a list of parameter combinations based on the sensor type.
-    2. Retrieves the feature matrix (X), target variable (Y), and group labels for cross-validation.
-    3. Applies data preprocessing, including polynomial feature transformation and scaling.
-    4. Iterates over different regression models and cross-validation techniques.
-    5. Evaluates the models using cross-validation and collects the results.
-    6. Saves the results to a CSV file in the "ANOVA_data" directory.
+    Parameters
+    ----------
+    sensor : str
+        The name of the sensor used for data collection (e.g., 'as7262', 'as7265x').
+    cv_repeats : int, optional
+        The number of cross-validation splits for StratifiedGroupShuffleSplit
+        during model evaluation (default is 10).
+    repeats : int, optional
+        The number of repeated evaluations for each parameter combination
+        to ensure robust results (default is 10).
 
-    Parameters:
-    leaf (str): The name of the leaf sample being analyzed.
-    sensor (str): The sensor type used for data collection.
-
-    The output CSV file will be named "ANOVA_<leaf>_<sensor>.csv" and will contain
-    the details of each parameter combination, including the regression model,
-    cross-validation technique, and score.
+    Outputs
+    -------
+    Saves a CSV file named "ANOVA_<sensor>.csv" in the "ANOVA_data" directory.
+    The file includes columns:
+        - Leaf: The leaf sample analyzed.
+        - Measurement Type: The type of measurement (e.g., 'reflectance', 'absorbance', 'raw').
+        - Integration Time: The integration time for the measurement.
+        - LED Current: The current applied to the LED (e.g., '12.5 mA', '25 mA').
+        - Score: The average cross-validation score for the given parameter combination.
     """
-    print(f"making {leaf} {sensor} ANOVA table")
     results = []
-    int_times = INT_TIMES
-    if sensor == "as7265x":
-        int_times = [50, 100, 150]
-    combinations = itertools.product(MEASUREMENT_TYPES, int_times, LED_CURRENTS, PREPROCESS)
-
-    for measure_type, int_time, current, preprocess in combinations:
-        x, y, groups = get_data.get_x_y(
-            leaf=leaf, sensor=sensor,
-            measurement_type=measure_type,
-            int_time=int_time, led_current=current,
-            send_leaf_numbers=True)
-        y = y["Avg Total Chlorophyll (µg/cm2)"]
-        regrs = regression_models_2_3
-        if sensor == "as7265x":  # change if as7265x sensor
-            regrs = regression_models_5x
-        if preprocess == "Poly":
-            x = PolynomialFeatures(degree=2).fit_transform(x)
-        else:
-            if sensor in ["as7262", "as7263"]:
-                regrs["PLS"] = PLSRegression(n_components=6)
-            elif sensor == "as7265x":
-                regrs["PLS"] = PLSRegression(n_components=18)
-        x = StandardScaler().fit_transform(x)
-
-        for regr_name, regr in regrs.items():
-            for cv_name, cv in cvs.items():
-                # get 5 test scores for each combo
-                scores = cross_val_score(
-                    regr, x, y, groups=groups, scoring=SCORE,
-                    cv=cv)
-                # Append the results to the list
-                for score in scores:
-                    results.append({
-                        "Leaf": leaf,
-                        "Sensor": sensor,
-                        "Measurement Type": measure_type,
-                        "Integration Time": int_time,
-                        "LED Current": current,
-                        "Preprocess": preprocess,
-                        "Regression Model": regr_name,
-                        "Cross Validation": cv_name,
-                        "Score": score
-                    })
-
-                # Create a DataFrame from the results list
-            results_df = pd.DataFrame(results)
-
-            # Save the DataFrame to a CSV file
-            filename = f"ANOVA_data/ANOVA_{leaf}_{sensor}.csv"
-            results_df.to_csv(filename, index=False)
-
-
-def print_pg_anova_tables():
-    """ Print out the ANOVA tables for each leaf, sensor combintation """
     for leaf in ALL_LEAVES:
-        for sensor in SENSORS:
-            print_pg_anova_table(leaf, sensor)
+        print(f"Making {leaf} {sensor} ANOVA table")
+
+        int_times = INT_TIMES
+        led = "White LED"
+        cv = StratifiedGroupShuffleSplit(n_splits=cv_repeats, test_size=0.2,
+                                         n_bins=10)
+        if sensor == "as7265x":
+            int_times = [50, 100, 150]
+            led = "b'White IR'"
+        combinations = itertools.product(MEASUREMENT_TYPES, int_times, LED_CURRENTS)
+        for i in range(repeats):
+            for measure_type, int_time, current in combinations:
+                if sensor == "as7265x" and current == "100 mA":  # was not tested
+                    continue
+                x, y, groups = get_data.get_x_y(
+                    leaf=leaf, sensor=sensor,
+                    led=led,
+                    measurement_type=measure_type,
+                    int_time=int_time, led_current=current,
+                    send_leaf_numbers=True)
+                y = y["Avg Total Chlorophyll (µg/cm2)"]
+
+                # Further preprocessing based on the 'preprocess' parameter
+                regressor = PLSRegression(n_components=pls_n_comps[sensor][leaf])
+
+                # Scaling the data
+                x_current = StandardScaler().fit_transform(x)
+
+                # Predict using cross-validation
+                scores = cross_val_score(
+                    regressor, x_current, y, groups=groups, cv=cv,
+                    scoring=SCORE)
+                print(scores)
+                print(type(scores))
+                # Append the results
+                results.append({
+                    "Leaf": leaf,
+                    "Measurement Type": measure_type,
+                    "Integration Time": int_time,
+                    "LED Current": current,
+                    "Score": scores.mean()
+                })
+
+    # Create a DataFrame from the results and save it to a CSV file
+    results_df = pd.DataFrame(results)
+    filename = f"ANOVA_data/ANOVA_{sensor}.csv"
+    results_df.to_csv(filename, index=False)
 
 
-def print_pg_anova_table(leaf: str, sensor: str):
+def print_pg_anova_table(sensor: str):
     """
     Filter and save the ANOVA results for a given leaf and sensor combination.
 
@@ -172,28 +175,87 @@ def print_pg_anova_table(leaf: str, sensor: str):
     The output file will contain the filtered ANOVA results based on the
     significance level specified for the Bonferroni-corrected p-values.
     """
-    print(f"{leaf} {sensor}")
-    filename = f"ANOVA_data/ANOVA_{leaf}_{sensor}.csv"
+    print(f"anova for {sensor}")
+    filename = f"ANOVA_data/ANOVA_{sensor}.csv"
     df = pd.read_csv(filename)
-
+    print(df)
+    print(df["LED Current"].unique())
     # Perform the ANOVA test
     aov = pg.anova(dv='Score',
-                   between=['Measurement Type', 'Integration Time', 'LED Current',
-                            'Preprocess', 'Regression Model', 'Cross Validation'],
+                   between=['Leaf', 'Measurement Type', 'Integration Time', 'LED Current'],
                    data=df)
 
     # Apply Bonferroni correction to the p-values
     aov['p-corrected'] = pg.multicomp(aov['p-unc'], method='bonferroni')[1]
 
     # Filter rows where p-corrected > 0.001
-    filtered_aov = aov[aov['p-corrected'] < 0.001]
+    filtered_aov = aov[aov['p-corrected'] < 0.01]
 
-    pd.set_option('display.max_rows', None)  # Ensure all rows are displayed
     print(filtered_aov)
 
+    # Run pairwise tests for significant variables
+    pairwise_results = {}
+    for factor in filtered_aov['Source']:
+        print(f"\nRunning pairwise comparisons for: {factor}")
+        posthoc = pg.pairwise_tests(data=df, dv='Score', between=factor, padjust='bonf')
+        pairwise_results[factor] = posthoc
+        print(posthoc)
     # Save the filtered ANOVA table to a new CSV file
-    output_filename = f"ANOVA_data/Filtered_ANOVA_{leaf}_{sensor}.csv"
+    output_filename = f"ANOVA_data/ANOVA_table_{sensor}.csv"
     filtered_aov.to_csv(output_filename, index=False)
+
+
+def make_box_plots(sensor):
+    df = pd.read_csv(f"ANOVA_data/ANOVA_{sensor}.csv")
+    # Create a figure with 3 subplots
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))  # 1 row, 3 columns
+    # Define the best conditions
+    best_led_current = "12.5 mA"
+    best_int_time = 50
+    best_measure_type = "absorbance"
+
+    print(df)
+    print(df.min())
+    def plot_boxplots(df, axes):
+        """
+        Plot boxplots for 'LED Current', 'Integration Time', and 'Measurement Type'.
+
+        Parameters:
+            df (pd.DataFrame): The data containing 'LED Current', 'Integration Time',
+                               'Measurement Type', and 'Score'.
+            axes (list): A list of matplotlib Axes objects for the 3 boxplots.
+        """
+        # Plot 1: Vary 'LED Current'
+        df_led = df[(df['Integration Time'] == best_int_time) &
+                    (df['Measurement Type'] == best_measure_type)]
+        print(df_led)
+        sns.violinplot(data=df_led, x='LED Current', y='Score', ax=axes[0])
+        axes[0].set_title("Score by LED Current")
+        axes[0].set_xlabel("LED Current")
+
+        # Plot 2: Boxplot for Integration Time
+        # Plot 1: Vary 'LED Current'
+        df_time = df[(df['LED Current'] == best_led_current) &
+                 (df['Measurement Type'] == best_measure_type)]
+        sns.violinplot(data=df_time, x='Integration Time', y='Score', ax=axes[1])
+        axes[1].set_title("Score by Integration Time")
+        axes[1].set_xlabel("Integration Time (ms)")
+
+        # Plot 3: Boxplot for Measurement Type
+        df_type = df[(df['LED Current'] == best_led_current) &
+                     (df['Integration Time'] == best_int_time)]
+        sns.violinplot(data=df_type, x='Measurement Type', y='Score', ax=axes[2])
+        axes[2].set_title("Score by Measurement Type")
+        axes[2].set_xlabel("Measurement Type")
+        for i in range(3):
+            axes[i].set_ylim([0, 1])
+
+            axes[i].set_ylabel("Score")
+
+    # Call the inner function with your DataFrame and axes
+    plot_boxplots(df, axes)
+    plt.show()
+
 
 
 def plot_scores_for_leaf_sensor(df, leaf, sensor, pdf=None):
@@ -248,126 +310,18 @@ def plot_scores_for_leaf_sensor(df, leaf, sensor, pdf=None):
         plt.show()
 
 
-def collect_best_scores_for_each_model():
-    # Dictionary to hold lists of best scores for each model
-    model_best_scores = defaultdict(list)
-
-    for leaf in ALL_LEAVES:
-        for sensor in SENSORS:
-            # Load the data for the current leaf/sensor combination
-            df = pd.read_csv(f"ANOVA_data/ANOVA_{leaf}_{sensor}.csv")
-
-            # Group by 'Regression Model' and calculate the max of 'Score'
-            grouped = df.groupby('Regression Model').agg({'Score': 'max'}).reset_index()
-
-            # Store the best score for each model
-            for index, row in grouped.iterrows():
-                model = row['Regression Model']
-                best_score = row['Score']
-                model_best_scores[model].append(best_score)
-
-    return model_best_scores
-
-
-def plot_model_performance(model_best_scores):
-    # Prepare lists for plotting
-    models = []
-    mean_scores = []
-    std_scores = []
-
-    # Calculate mean and std for each model
-    for model, scores in model_best_scores.items():
-        models.append(model)
-        mean_scores.append(pd.Series(scores).mean())
-        std_scores.append(pd.Series(scores).std())
-
-    # Plotting the mean and std of the best scores for each model
-    plt.figure(figsize=(10, 6))
-    plt.errorbar(models, mean_scores, yerr=std_scores, fmt='o', capsize=5, elinewidth=2,
-                 markeredgewidth=2)
-    plt.title('Mean and Std of Best Scores for Each Regression Model')
-    plt.xlabel('Regression Model')
-    plt.ylabel('Score')
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.show()
-
 def get_combined_anova_tables():
     combined_data = []
     # make combined dataset
-    for leaf in ALL_LEAVES:
-        for sensor in SENSORS:
-            df = pd.read_csv(f"ANOVA_data/ANOVA_{leaf}_{sensor}.csv")
-            df['Leaf'] = leaf
-            df['Sensor'] = sensor
-            combined_data.append(df)
+    for sensor in SENSORS:
+        df = pd.read_csv(f"ANOVA_data/ANOVA_{sensor}.csv")
+        df['Sensor'] = sensor
+        combined_data.append(df)
     combined_df = pd.concat(combined_data, ignore_index=True)
     # Convert relevant columns to float32
     numeric_cols = combined_df.select_dtypes(include=[np.number]).columns
     combined_df[numeric_cols] = combined_df[numeric_cols].astype(np.float32)
     return combined_df
-
-def print_1_way_anova(ind_variable):
-    print("check")
-    df = get_combined_anova_tables()
-    print(df.shape)
-    print(df)
-    if True:
-        df = df[df['Cross Validation'] == "Shuffle"]
-        df = df[df['Preprocess'] == "Poly"]
-    print(df.shape)
-    all_variable = ['Leaf', 'Sensor', 'Regression Model',
-                    'Cross Validation', 'Preprocess',
-                    "LED Current", "Integration Time",
-                    "Measurement Type"]
-    # aov = pg.anova(dv='Score',
-    #                between=[ind_variable],
-    #                data=df,
-    #                detailed=True)
-
-    aov = pg.anova(dv='Score',
-                   between=['Leaf', 'Sensor', 'Regression Model',
-                            "LED Current", "Integration Time",
-                            "Measurement Type"],
-                   data=df,
-                   detailed=True)
-    # Display the ANOVA table
-    print(aov)
-
-
-def paiwise_ttests():
-    """ Run and print """
-    df = get_combined_anova_tables()
-    # Run pairwise t-tests for 'Leaf'
-    ttest_leaf = pg.pairwise_ttests(dv='Score', between='Leaf', data=df, padjust='bonf')
-
-    # Run pairwise t-tests for 'Sensor'
-    print(df["Sensor"].unique())
-    ttest_sensor = pg.pairwise_ttests(dv='Score', between='Sensor', data=df, padjust='bonf')
-
-    # Run pairwise t-tests for 'Regression Model'
-    ttest_reg_model = pg.pairwise_ttests(dv='Score', between='Regression Model', data=df,
-                                         padjust='bonf')
-
-    # Run pairwise t-tests for 'LED Current'
-    ttest_led_current = pg.pairwise_ttests(dv='Score', between='LED Current', data=df,
-                                           padjust='bonf')
-
-    # Run pairwise t-tests for 'Integration Time'
-    ttest_integration_time = pg.pairwise_ttests(dv='Score', between='Integration Time', data=df,
-                                                padjust='bonf')
-
-    # Run pairwise t-tests for 'Measurement Type'
-    ttest_measurement_type = pg.pairwise_ttests(dv='Score', between='Measurement Type', data=df,
-                                                padjust='bonf')
-
-    # Display the results for each t-test
-    print(ttest_leaf)
-    print(ttest_sensor)
-    print(ttest_reg_model)
-    print(ttest_led_current)
-    print(ttest_integration_time)
-    print(ttest_measurement_type)
 
 
 def get_best_conditions() -> dict:
@@ -396,8 +350,8 @@ def get_best_conditions() -> dict:
     # --- Best Conditions for Each Sensor (Overall across all leaves) ---
     # Group by 'Sensor' and other conditions, calculate the average 'Score' across all leaves
     mean_scores_sensor = df.groupby(
-        ['Sensor', 'Preprocess', 'Regression Model', 'Cross Validation', 'LED Current',
-         'Integration Time', 'Measurement Type']
+        ['Sensor', 'LED Current', 'Integration Time',
+         'Measurement Type']
     )['Score'].mean().reset_index()
 
     # Find the row with the highest average score for each sensor
@@ -408,7 +362,7 @@ def get_best_conditions() -> dict:
     # Group by all condition columns without 'Sensor' and 'Leaf',
     # then calculate the mean score across all leaves and sensors
     mean_scores_overall = df.groupby(
-        ['Preprocess', 'Regression Model', 'Cross Validation', 'LED Current', 'Integration Time',
+        ['LED Current', 'Integration Time',
          'Measurement Type']
     )['Score'].mean().reset_index()
 
@@ -427,41 +381,44 @@ def collect_best_scores_for_each_condition(condition_name):
     # of the condition and regression models
     condition_best_scores = defaultdict(lambda: defaultdict(list))
 
-    for leaf in ALL_LEAVES:
-        for sensor in SENSORS:
-            # Load the data for the current leaf/sensor combination
-            df = pd.read_csv(f"ANOVA_data/ANOVA_{leaf}_{sensor}.csv")
-
-            # Group by the condition and regression model,
-            # then find the max score for each combination
-            grouped = df.groupby([condition_name, 'Regression Model']
-                                 ).agg({'Score': 'max'}).reset_index()
-
-            # Store the best score for each regression model under each condition
-            for index, row in grouped.iterrows():
-                condition_value = row[condition_name]
-                model = row['Regression Model']
-                best_score = row['Score']
-                condition_best_scores[condition_value][model].append(best_score)
+    for sensor in SENSORS:
+        print(sensor)
+        # Load the data for the current leaf/sensor combination
+        df = pd.read_csv(f"ANOVA_data/ANOVA_{sensor}.csv")
+        print(df)
+        print('===')
+        print(df.groupby([condition_name]))
+        print('++++')
+        # Group by the condition and regression model,
+        # then find the max score for each combination
+        grouped = df.groupby([condition_name]
+                             ).agg({'Score': 'max'}).reset_index()
+        print(grouped)
+        # Store the best score for each regression model under each condition
+        for index, row in grouped.iterrows():
+            condition_value = row[condition_name]
+            best_score = row['Score']
+            condition_best_scores[condition_value] = best_score
 
     return condition_best_scores
+
 
 def plot_performance_for_condition(condition_name, condition_best_scores):
     # Prepare the plot for each condition
     plt.figure(figsize=(10, 6))
-
+    print(condition_name)
+    print(condition_best_scores)
     # Iterate through each condition value (e.g., each 'LED Current', 'Integration Time')
     for condition_value, model_scores in condition_best_scores.items():
         models = []
         mean_scores = []
         std_scores = []
-
         # Calculate mean and std for each regression model under the current condition value
         for model, scores in model_scores.items():
             models.append(model)
             mean_scores.append(pd.Series(scores).mean())
             std_scores.append(pd.Series(scores).std())
-
+        print('models: ', models)
         # Plotting the mean and std of best scores for each regression model under the current condition
         plt.errorbar(models, mean_scores, yerr=std_scores, fmt='o', capsize=5, elinewidth=2, markeredgewidth=2,
                      label=f"{condition_name}: {condition_value}")
@@ -499,12 +456,9 @@ def plot_and_check_statistics_for_conditions() -> None:
 
     # Inner function to filter data based on conditions
     def filter_data(leaf_data, condition):
-        return (leaf_data['Regression Model'] == condition['Regression Model']) & \
-            (leaf_data['LED Current'] == condition['LED Current']) & \
-            (leaf_data['Integration Time'] == condition['Integration Time']) & \
-            (leaf_data['Measurement Type'] == condition['Measurement Type']) & \
-            (leaf_data['Preprocess'] == condition['Preprocess']) & \
-            (leaf_data['Cross Validation'] == condition['Cross Validation'])
+        return (leaf_data['LED Current'] == condition['LED Current']) & \
+               (leaf_data['Integration Time'] == condition['Integration Time']) & \
+               (leaf_data['Measurement Type'] == condition['Measurement Type'])
 
     # List of sensors
     sensors = df['Sensor'].unique()
@@ -855,15 +809,16 @@ def perform_anova_and_tukey_test(df: pd.DataFrame, factor: str, sensor: str = No
 
 if __name__ == '__main__':
     # make_anova_table_files()
-
-    if False:
+    # print_pg_anova_table('as7263')
+    make_box_plots("as7262")
+    ham
+    if True:
         # List of conditions to iterate over and generate plots for each
-        conditions_to_plot = ['LED Current', 'Integration Time', 'Measurement Type', 'Preprocess',
-                              'Cross Validation']
+        conditions_to_plot = ['LED Current', 'Integration Time', 'Measurement Type']
 
         for _condition in conditions_to_plot:
             # Collect the best scores for each condition
-            _condition_best_scores = collect_best_scores_for_each_condition(condition)
+            _condition_best_scores = collect_best_scores_for_each_condition(_condition)
 
             # Plot the performance for the current condition
             plot_performance_for_condition(_condition, _condition_best_scores)
@@ -872,9 +827,10 @@ if __name__ == '__main__':
             for _leaf in ALL_LEAVES:
                 for _sensor in SENSORS:
                     print(f"{_leaf}: {_sensor}")
-                    _df = pd.read_csv(f"ANOVA_data/ANOVA_{_leaf}_{_sensor}.csv")
+                    _df = pd.read_csv(f"trash/ANOVA_data/ANOVA_{_leaf}_{_sensor}.csv")
 
                     # plot_scores_for_leaf_sensor(df, leaf, sensor, pdf=pdf)
+    ham
     # paiwise_ttests()
     # print_pg_anova_tables()
     # print_1_way_anova('Regression Model')
