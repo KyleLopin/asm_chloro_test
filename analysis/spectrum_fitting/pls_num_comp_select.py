@@ -27,8 +27,18 @@ USE_RFECV = False
 USE_SFS = False
 AIC_COLOR = "green"
 AIC_FILL = "green"
-N_SPLITS = 5  # set to 20 for final figure, use lower value to change visual aspects
+# used to choose the number of components which is a fairly flat AIC score, and this
+# will be repeated an additional N_SPLITS_OUTER for final AIC and R2 scores
+N_SPLITS_INNER = 20
+N_SPLITS_OUTER = 50  # To reduce variance in final score
 BEST_AIC_COLOR = "black"
+
+# This PLS scans output scan number and R2 and MAE scores, to not have to
+# redo the tables all the time, use a CV seed to get reproducable data
+# 124: R2=.962, MAE = 3.55
+# 125: R2=.957 MAE=3.71
+# 126; R2=.959 MAE=3.61  # use this one, middle of the 3 runs for MAE, R2 the same
+RANDOM_STATE = 126  # for Mango runs is middle of for MAE
 
 
 def calculate_aic(residual_sum_of_squares, num_observations, num_parameters):
@@ -79,15 +89,40 @@ def calculate_aic(residual_sum_of_squares, num_observations, num_parameters):
 
 def main_pls_selector_w_poly_analysis(leaf: str, sensor: str, ax, use_poly=False):
     """
-    Perform the main analysis by comparing original data with polynomial-transformed data.
+    Perform PLS regression analysis for a given leaf and sensor,
+    optionally using polynomial expansion.
 
+    This function preprocesses the data, runs an outer cross-validation (CV) loop
+    to evaluate PLS performance with varying numbers of latent variables, and plots
+    the results on the given axes. Optionally, polynomial features can be included
+    for expanded analysis.
 
-    Args:
-        leaf (str): The name of the leaf sample being analyzed.
-        sensor (str): The sensor type used for data collection.
-        ax: pyplot axis
+    Parameters
+    ----------
+    leaf : str
+        The name of the leaf to analyze.
+    sensor : str
+        The name of the sensor to use for data analysis (e.g., 'as7262', 'as7265x').
+    ax : plt.Axes
+        The primary Matplotlib Axes object for plotting R² scores.
+    use_poly : bool, optional
+        If True, performs polynomial feature expansion and evaluates the results.
+        Default is False.
 
-    Returns:
+    Returns
+    -------
+    None
+        The function modifies the provided Axes objects to display the results.
+
+    Notes
+    -----
+    - The function uses different configurations for the AS7265x sensor due to its
+      larger number of channels.
+    - A secondary y-axis is created on the same plot to show AIC scores.
+    - The analysis includes calculating mean MAE and R² scores for both original
+      and polynomially expanded features.
+    - Results are plotted using `plot_nested_cv_pls_variable_selector`.
+    - Validation MAE and R² scores are plotted for each leaf/sensor combination
 
     """
     led = "White LED"
@@ -95,8 +130,8 @@ def main_pls_selector_w_poly_analysis(leaf: str, sensor: str, ax, use_poly=False
     if sensor == "as7265x":
         led = "b'White IR'"
         max_comps = 14
-    # x, y, groups = get_data.get_x_y(sensor=sensor, int_time=50,
-    #                                 led_current="12.5 mA", leaf=leaf,
+    # x, y, groups = get_data.get_x_y(sensor=sensor, int_time=150,
+    #                                 led_current="25 mA", leaf=leaf,
     #                                 measurement_type="absorbance",
     #                                 led=led,
     #                                 send_leaf_numbers=True)
@@ -143,7 +178,44 @@ def main_pls_selector_w_poly_analysis(leaf: str, sensor: str, ax, use_poly=False
 
 def plot_nested_cv_pls_variable_selector(results: dict, which_type: str,
                                          ax: plt.Axes, ax2: plt.Axes):
-    # Plot the mean of the inner mean scores versus the number of components with a shaded area for std
+    """
+    Plot the results of a nested cross-validation for PLS regression,
+    showing R² scores and AIC scores with confidence intervals.
+
+    Parameters
+    ----------
+    results : dict
+        A dictionary containing the nested CV results with the following keys:
+        - "r2_inner_means": Mean R² scores from the inner CV loop.
+        - "r2_inner_std": Standard deviations of R² scores from the inner CV loop.
+        - "aic_inner_means": Mean AIC scores from the inner CV loop.
+        - "aic_inner_std": Standard deviations of AIC scores from the inner CV loop.
+        - "outer_mae_scores": Mean absolute error scores from the outer CV loop.
+        - "outer_r2_scores": R² scores from the outer CV loop.
+    which_type : str
+        Type of data being analyzed, either "original" or "poly" (polynomial features).
+        Determines the plot color and line style.
+    ax : plt.Axes
+        The primary Matplotlib Axes object for plotting R² scores.
+    ax2 : plt.Axes
+        The secondary Matplotlib Axes object (twin y-axis) for plotting AIC scores.
+
+    Returns
+    -------
+    None
+        The function modifies the provided Axes objects to display the plots.
+
+    Notes
+    -----
+    - The function visualizes R² scores as a line plot with a shaded region
+      representing ±1 standard deviation for the inner CV loop.
+    - AIC scores are plotted on a secondary y-axis (ax2) with similar visualization.
+    - The optimal number of PLS components is determined based on the minimum AIC
+      and annotated with a vertical dashed line.
+    - Prints key metrics such as mean outer MAE and R² scores for reference.
+    """
+    # Plot the mean of the inner mean scores versus the
+    # number of components with a shaded area for standard deviations
     max_comps = len(results["r2_inner_means"])
     # defaults if not polynomial fit
     # line_color = '#ff7f0e'
@@ -231,29 +303,60 @@ def plot_nested_cv_pls_variable_selector(results: dict, which_type: str,
 
 
 def outer_cv_loop(x, y, groups, cv=None,
-                    max_components: int = 6):
+                  max_components: int = 6):
     """
     Perform outer cross-validation to evaluate the performance of a PLS regression model.
-    Each fold performs an inner CV grid search to find the optimal number of components,
+    Each outer fold performs an inner CV grid search to determine the optimal number of components,
     and the outer fold scores are collected to assess the model's generalization.
 
-    Args:
-        x (pd.DataFrame or np.ndarray): Feature matrix containing the predictor variables.
-        y (pd.Series or np.ndarray): Target variable values.
-        groups (pd.Series or np.ndarray): Group labels for the samples used for cross-validation.
-        max_components (int, optional): The maximum number of PLS components to test. Defaults to 6.
-        outer_splits (int, optional): The number of outer cross-validation splits. Defaults to 10.
+    Parameters
+    ----------
+    x : pd.DataFrame or np.ndarray
+        Feature matrix containing the predictor variables.
+    y : pd.Series or np.ndarray
+        Target variable values.
+    groups : pd.Series or np.ndarray
+        Group labels for the samples used for stratified cross-validation.
+    max_components : int, optional
+        The maximum number of PLS components to test. Defaults to 6.
 
-    Returns:
-        dict: A dictionary containing:
-            - outer_scores (list): Validation scores for each outer fold.
-            - inner_scores (list): Mean test scores for each inner fold.
-            - std_scores (list): Standard deviation of test scores for each inner fold.
+    Returns
+    -------
+    dict
+        A dictionary containing:
+        - 'outer_mae_scores' : list of float
+            Mean absolute error scores for each outer fold.
+        - 'outer_r2_scores' : list of float
+            R² scores for each outer fold.
+        - 'inner_scores' : list of lists
+            R² scores for each inner fold and number of components.
+        - 'r2_inner_means' : np.ndarray
+            Mean R² scores for each number of components across inner folds.
+        - 'r2_inner_std' : np.ndarray
+            Standard deviation of R² scores for each number of components across inner folds.
+        - 'aic_inner_means' : np.ndarray
+            Mean AIC scores for each number of components across inner folds.
+        - 'aic_inner_std' : np.ndarray
+            Standard deviation of AIC scores for each number of components across inner folds.
+        - 'mae_inner_means' : np.ndarray
+            Mean MAE scores for each number of components across inner folds.
+        - 'mae_inner_std' : np.ndarray
+            Standard deviation of MAE scores for each number of components across inner folds.
+
+    Notes
+    -----
+    - The function uses a nested cross-validation approach where the outer loop evaluates
+      model generalization and the inner loop determines the optimal number of components.
+    - The best number of components for each outer fold is selected based on the minimum AIC score.
+    - The outer loop results provide metrics to evaluate the model's performance, including
+      mean absolute error (MAE) and R² scores.
+
     """
     # Use GroupShuffleSplit if no cross-validation strategy is provided
     if not cv:
-        cv = GroupShuffleSplit(n_splits=N_SPLITS, test_size=0.20)
-        cv = StratifiedGroupShuffleSplit(n_splits=N_SPLITS, test_size=0.2, n_bins=10)
+        # cv = GroupShuffleSplit(n_splits=N_SPLITS_OUTER, test_size=0.20)
+        cv = StratifiedGroupShuffleSplit(n_splits=N_SPLITS_OUTER, test_size=0.2,
+                                         n_bins=10, random_state=RANDOM_STATE)
     # Initialize lists to store results
     outer_mae_scores = []
     outer_r2_scores = []
@@ -337,12 +440,14 @@ def grid_search_pls(x, y, groups, cv=None,
     Returns:
         tuple: A tuple containing:
             - mean_test_scores (list): Mean test scores for each number of components.
-            - std_test_scores (list): Standard deviation of test scores for each number of components.
+            - std_test_scores (list): Standard deviation of test scores
+                                      for each number of components.
     """
     # Use GroupShuffleSplit if no cross-validation strategy is provided
     if not cv:
-        cv = GroupShuffleSplit(n_splits=N_SPLITS, test_size=0.25)
-        cv = StratifiedGroupShuffleSplit(n_splits=N_SPLITS, test_size=0.25, n_bins=10)
+        # cv = GroupShuffleSplit(n_splits=N_SPLITS_INNER, test_size=0.25)
+        cv = StratifiedGroupShuffleSplit(n_splits=N_SPLITS_INNER, test_size=0.25,
+                                         n_bins=10, random_state=RANDOM_STATE)
 
     # Initialize PLS regression model with a high iteration limit to ensure convergence
     pls = PLSRegression(max_iter=10000)
@@ -395,7 +500,8 @@ def grid_search_pls_aic_r2(x, y, groups, cv=None, max_components: int = 6):
     y = np.array(y)
 
     if not cv:
-        cv = StratifiedGroupShuffleSplit(n_splits=N_SPLITS, test_size=0.25, n_bins=10)
+        cv = StratifiedGroupShuffleSplit(n_splits=N_SPLITS_INNER, test_size=0.25,
+                                         n_bins=10, random_state=RANDOM_STATE)
 
     # Initialize a dictionary to store results as lists
     results = {
@@ -488,8 +594,33 @@ def grid_search_pls_aic_r2(x, y, groups, cv=None, max_components: int = 6):
 
 
 def plot_3_sensors(leaf: str):
+    """
+        Plot PLS hyperparameter tuning results for three sensors for a single leaf.
+
+        This function generates a 3x1 grid of subplots, where each subplot shows the
+        performance of PLS regression models for each sensor applied to the
+        given leaf. It includes legends, axis labels, and a title to ensure clarity.
+
+        Parameters
+        ----------
+        leaf : str
+            The name of the leaf to analyze.
+
+        Returns
+        -------
+        None
+            Displays and saves the resulting figure as 'pls_scan.pdf'.
+
+        Notes
+        -----
+        - Each subplot is generated using the `main_pls_selector_w_poly_analysis` function.
+        - Y-axis limits are adjusted individually for the three sensors to improve clarity.
+        - The legend, describing AIC scores and R² metrics, is placed in the bottom-right
+          corner of the first subplot.
+        - The function uses a fixed x-axis range (1 to 14) for consistency across sensors.
+        """
     figure, axes = plt.subplots(3, 1, figsize=(7, 8.5),
-                                 sharex=True)
+                                sharex=True)
     for sensor, ax in zip(["as7262", "as7263", "as7265x"], axes):
         print(sensor)
         main_pls_selector_w_poly_analysis(leaf, sensor, ax,
@@ -509,11 +640,37 @@ def plot_3_sensors(leaf: str):
     figure.suptitle(f"{leaf.capitalize()} PLS hyperparameter tuning",
                     fontsize=12)
     plt.tight_layout()
-    # figure.savefig("pls_scan.pdf", dpi=300, format='pdf')
+    figure.savefig("pls_scan.pdf", dpi=300, format='pdf')
     plt.show()
 
 
 def plot_4_leaves_3_sensors(leaves):
+    """
+    Plot PLS hyperparameter tuning results for four leaves across three sensors.
+
+    This function generates a 6x2 grid of subplots, where each subplot shows the
+    performance of PLS regression models for a specific leaf-sensor combination.
+    It adjusts the y-axis limits and adds annotations, legends, and titles for clarity.
+
+    Parameters
+    ----------
+    leaves : list[str]
+        A list of leaf names to include in the analysis. Each leaf is paired with
+        results from three sensors: AS7262, AS7263, and AS7265x.
+
+    Returns
+    -------
+    None
+        Displays and saves the resulting figure as 'pls_scan_4_leaves.pdf'.
+
+    Notes
+    -----
+    - Each subplot is generated using the `main_pls_selector_w_poly_analysis` function.
+    - The function ensures appropriate y-axis limits based on the sensor and removes
+      excessive y-axis labels for readability.
+    - The legend describing the AIC score and R² metrics is placed in the bottom-right
+      corner of the last row.
+    """
     figure, axes = plt.subplots(6, 2, figsize=(7, 8.5),
                                 sharex=True)
     axes = axes.flatten(order='F')
@@ -543,13 +700,24 @@ def plot_4_leaves_3_sensors(leaves):
             print(i, leaf, sensor)
     # and text to act as ylabels
     figure.text(0.04, 0.5, 'R²',
-             ha='center', va='center', rotation='vertical', fontsize=12)
+                ha='center', va='center', rotation='vertical', fontsize=12)
     figure.text(0.94, 0.5, "AIC Score (lower is better)",
                 ha='center', va='center', rotation='vertical', fontsize=12)
     for j in [5, 11]:
         axes[j].set_xlabel('Number of PLS Components')
     figure.subplots_adjust(left=0.1, right=0.85, wspace=.35)
+    figure.suptitle(f"PLS hyperparameter tuning",
+                    fontsize=12)
 
+    # fill in legend with ax2 AIC label
+    axes[10].plot([], [], label="Akaike Information\nCriterion Scores", color=AIC_COLOR)
+    axes[10].fill_between([], [], label='±1 Standard Deviation', color=AIC_FILL, alpha=0.3)
+    # to keep AIC as last entry put it here
+    axes[10].plot([], [], label="Best AIC Score", color=BEST_AIC_COLOR, ls='--')
+
+    axes[10].legend(fontsize=10, loc='lower right')
+
+    figure.savefig("pls_scan_4_leaves.pdf", dpi=300, format='pdf')
     # plt.tight_layout()
     plt.show()
 
