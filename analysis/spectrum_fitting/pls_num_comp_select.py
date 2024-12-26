@@ -29,8 +29,8 @@ AIC_COLOR = "green"
 AIC_FILL = "green"
 # used to choose the number of components which is a fairly flat AIC score, and this
 # will be repeated an additional N_SPLITS_OUTER for final AIC and R2 scores
-N_SPLITS_INNER = 20
-N_SPLITS_OUTER = 50  # To reduce variance in final score
+N_SPLITS_INNER = 20  # To check graph layouts use lower numbers
+N_SPLITS_OUTER = 50  # To reduce variance in final score use high numbers
 BEST_AIC_COLOR = "black"
 
 # This PLS scans output scan number and R2 and MAE scores, to not have to
@@ -317,6 +317,9 @@ def outer_cv_loop(x, y, groups, cv=None,
         Target variable values.
     groups : pd.Series or np.ndarray
         Group labels for the samples used for stratified cross-validation.
+    cv : cross-validation generator, optional
+        Cross-validation splitting strategy. If None, a default `StratifiedGroupShuffleSplit`
+        with specific settings will be used.
     max_components : int, optional
         The maximum number of PLS components to test. Defaults to 6.
 
@@ -705,9 +708,9 @@ def plot_4_leaves_3_sensors(leaves):
                 ha='center', va='center', rotation='vertical', fontsize=12)
     for j in [5, 11]:
         axes[j].set_xlabel('Number of PLS Components')
-    figure.subplots_adjust(left=0.1, right=0.85, wspace=.35)
+    figure.subplots_adjust(left=0.10, right=0.87, wspace=.31, bottom=0.07, top=0.94)
     figure.suptitle(f"PLS hyperparameter tuning",
-                    fontsize=12)
+                    fontsize=12, y=0.98)
 
     # fill in legend with ax2 AIC label
     axes[10].plot([], [], label="Akaike Information\nCriterion Scores", color=AIC_COLOR)
@@ -715,7 +718,7 @@ def plot_4_leaves_3_sensors(leaves):
     # to keep AIC as last entry put it here
     axes[10].plot([], [], label="Best AIC Score", color=BEST_AIC_COLOR, ls='--')
 
-    axes[10].legend(fontsize=10, loc='lower right')
+    axes[10].legend(fontsize='xx-small', loc='lower right', frameon=False)
 
     figure.savefig("pls_scan_4_leaves.pdf", dpi=300, format='pdf')
     # plt.tight_layout()
