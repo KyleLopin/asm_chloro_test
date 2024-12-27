@@ -1,7 +1,7 @@
 # Copyright (c) 2024 Kyle Lopin (Naresuan University) <kylel@nu.ac.th>
 
 """
-Make an Anova tabe for AS7262, AS7263 and AS7265x sensor for different
+Make an Anova table for AS7262, AS7263 and AS7265x sensor for different
 led current, measurement types, and integration times for the different leave types
 """
 
@@ -22,9 +22,7 @@ import seaborn as sns
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.exceptions import DataConversionWarning
 from sklearn.linear_model import ARDRegression, HuberRegressor, LassoLarsIC, LinearRegression
-
-from sklearn.metrics import r2_score
-from sklearn.model_selection import (cross_val_predict, cross_val_score,
+from sklearn.model_selection import (cross_val_score,
                                      GroupKFold, GroupShuffleSplit)
 from sklearn.preprocessing import StandardScaler
 from statannotations.Annotator import Annotator  # For cleaner annotations
@@ -42,8 +40,8 @@ INT_TIMES = [50, 100, 150, 200, 250]
 ALL_LEAVES = ["mango", "banana", "jasmine", "rice", "sugarcane"]
 MEASUREMENT_TYPES = ["raw", "reflectance", "absorbance"]
 SENSORS = ["as7262", "as7263", "as7265x"]
-pls_n_comps = {"as7262": {"banana": 5, "jasmine": 4, "mango": 5, "rice": 6, "sugarcane": 5},
-               "as7263": {"banana": 5, "jasmine": 5, "mango": 5, "rice": 5, "sugarcane": 6},
+pls_n_comps = {"as7262": {"banana": 6, "jasmine": 4, "mango": 5, "rice": 6, "sugarcane": 6},
+               "as7263": {"banana": 5, "jasmine": 5, "mango": 5, "rice": 5, "sugarcane": 5},
                "as7265x": {"banana": 8, "jasmine": 14, "mango": 11, "rice": 6, "sugarcane": 6}}
 
 SCORE = "r2"
@@ -80,18 +78,18 @@ violin_colors = {"as7262": [[deep_blue, deep_red, deep_red, deep_red],
                             [deep_red, deep_red, deep_blue, deep_blue, deep_blue],
                             [deep_red, deep_red, deep_blue]],
                  "as7265x": [[deep_blue, deep_red, deep_red],
-                            [deep_blue, deep_blue, deep_blue],
-                            [deep_blue, deep_blue, deep_blue]]}
+                             [deep_blue, deep_blue, deep_blue],
+                             [deep_blue, deep_blue, deep_blue]]}
 YLIM = ([0.5, 1.0])
 
 
 def make_anova_table_files():
     """ make .csv file for each sensor to run ANOVA analysis on"""
-    for sensor in SENSORS:
+    for sensor in ["as7263"]:
         make_anova_table_file(sensor)
 
 
-def make_anova_table_file(sensor: str, cv_repeats = 10, repeats: int = 5):
+def make_anova_table_file(sensor: str, cv_repeats: int = 10):
     """
     Generate an ANOVA table CSV file for a given sensor and leaf combinations
     by running Partial Least Squares (PLS) regression models with various
@@ -104,9 +102,6 @@ def make_anova_table_file(sensor: str, cv_repeats = 10, repeats: int = 5):
     cv_repeats : int, optional
         The number of cross-validation splits for StratifiedGroupShuffleSplit
         during model evaluation (default is 10).
-    repeats : int, optional
-        The number of repeated evaluations for each parameter combination
-        to ensure robust results (default is 10).
 
     Outputs
     -------
@@ -228,11 +223,39 @@ def print_pg_anova_table(sensor: str):
        and print results in LaTeX format.
     9. Save the filtered ANOVA table to "ANOVA_table_<sensor>.csv" in the "ANOVA_data" directory.
     """
+
+    def conditional_format(value):
+        """
+        Format a value based on its magnitude:
+        - Values > 0.01 are formatted as decimals with 3 decimal places.
+        - Values <= 0.01 are formatted in scientific notation with 2 decimal places.
+        - Values smaller than NumPy's floating-point tolerance are displayed as '< ε',
+          and the tolerance is printed.
+
+        Parameters
+        ----------
+        value : float
+            The value to be formatted.
+
+        Returns
+        -------
+        str
+            The formatted string representation of the value.
+        """
+        tolerance = np.finfo(float).eps  # Numerical tolerance for float64
+
+        if abs(value) < tolerance:
+            print(f"Value {value:.2e} is smaller than the tolerance (ε = {tolerance:.2e})")
+            return r"$< \varepsilon$"  # LaTeX string for '< ε'
+        elif value > 0.01:
+            return "{:.3f}".format(value)  # Decimal format with 3 decimal places
+        else:
+            return "{:.2e}".format(value)  # Scientific notation
     print(f"anova for {sensor}")
     filename = f"ANOVA_data/ANOVA_{sensor}.csv"
     df = pd.read_csv(filename)
     between_columns = ['Leaf', 'Measurement Type', 'Integration Time', 'LED Current']
-    if True:  # filter the AS7263 data, its super confusing
+    if False:  # filter the AS7263 data, its super confusing
         if sensor == "as7263":
             df = df[df['Measurement Type'] == "absorbance"]
             between_columns = ['Leaf', 'Integration Time', 'LED Current']
@@ -249,15 +272,16 @@ def print_pg_anova_table(sensor: str):
     filtered_aov = aov[aov['p-corrected'] < 0.05]
     # format columns for latex
     aov['DF'] = pd.to_numeric(aov['DF'], errors='coerce').astype(int)
-    for column in ['SS', 'F']:
+    print(aov)
+    for column in ['SS', 'F', 'MS']:
         aov[column] = aov[column].apply(lambda x: f"{x:.2f}")  # 2 decimal places for SS
-    # for column in ['p-unc', 'p-corrected']:
-    #     aov[column] = aov[column].map(lambda x: f"$10^{{{int(np.log10(x))}}}$" if x > 0 else "$0$")  # Scientific notation
 
     print(aov)
 
     # Filter non-interacting components (rows without "*")
     non_interacting = aov[~aov['Source'].str.contains("\*")]
+    for column in ["p-unc", "p-corrected"]:
+        non_interacting[column] = non_interacting[column].apply(conditional_format)
 
     # Print LaTeX table
     latex_table = non_interacting.to_latex(index=False, float_format="{:.2e}".format,
@@ -281,7 +305,11 @@ def print_pg_anova_table(sensor: str):
         #     # Scientific notation
         #     posthoc[column] = posthoc[column].map(
         #         lambda x: "1.0" if x == 1 else f"$10^{{{int(np.log10(x))}}}$" if x > 0 else "$0$")
-
+        # Format specific columns
+        posthoc["T"] = posthoc["T"].map(
+            "{:.2f}".format)  # Format 'T' with 2 decimal places
+        for column in ["p-unc", "p-corr"]:
+            posthoc[column] = posthoc[column].apply(conditional_format)
         pw_latex = posthoc[["Contrast", "A", "B", "T", "p-unc", "p-corr", "BF10"]].to_latex(
             index=False, float_format="{:.2e}".format, escape=False,
             caption=f"{sensor} {factor} Pairwise tests.",
@@ -291,171 +319,6 @@ def print_pg_anova_table(sensor: str):
     # Save the filtered ANOVA table to a new CSV file
     output_filename = f"ANOVA_data/ANOVA_table_{sensor}.csv"
     filtered_aov.to_csv(output_filename, index=False)
-
-
-def make_box_plots_depr2(sensor: str) -> None:
-    """
-    Generate violin plots for model performance scores by varying 'LED Current',
-    'Integration Time', and 'Measurement Type' under the best conditions.
-
-    Parameters
-    ----------
-    sensor : str
-        The name of the sensor used to filter the input data (e.g., 'as7262', 'as7265x').
-
-    Returns
-    -------
-    None
-        Displays the violin plots for three parameter variations.
-
-    Notes
-    -----
-    The function reads the preprocessed ANOVA table data for the given sensor
-    from a CSV file and generates three violin plots:
-    1. Varying 'LED Current' with fixed 'Integration Time' and 'Measurement Type'.
-    2. Varying 'Integration Time' with fixed 'LED Current' and 'Measurement Type'.
-    3. Varying 'Measurement Type' with fixed 'LED Current' and 'Integration Time'.
-    """
-    df = pd.read_csv(f"ANOVA_data/ANOVA_{sensor}.csv")
-    # Create a figure with 3 subplots
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))  # 1 row, 3 columns
-    # Define the best conditions
-    best_led_current = "12.5 mA"
-    best_int_time = 50
-    best_measure_type = "absorbance"
-
-
-    def plot_boxplots(df, axes):
-        """
-        Plot violin plots for 'LED Current', 'Integration Time', and 'Measurement Type'
-        based on the filtered DataFrame under predefined best conditions.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            The input DataFrame containing columns: 'LED Current', 'Integration Time',
-            'Measurement Type', and 'Score'.
-        axes : list[plt.Axes]
-            A list of matplotlib Axes objects where the plots will be drawn.
-
-        Returns
-        -------
-        None
-            The function modifies the provided axes to display the plots.
-        """
-        # Plot 1: Vary 'LED Current'
-        df_led = df[(df['Integration Time'] == best_int_time) &
-                    (df['Measurement Type'] == best_measure_type)]
-
-        sns.violinplot(data=df_led, x='LED Current', y='Score', ax=axes[0])
-        axes[0].set_title("Score by LED Current")
-        axes[0].set_xlabel("LED Current")
-        axes[0].set_ylabel("Score")
-        # Plot 2: Boxplot for Integration Time
-        # Plot 1: Vary 'LED Current'
-        df_time = df[(df['LED Current'] == best_led_current) &
-                 (df['Measurement Type'] == best_measure_type)]
-        sns.violinplot(data=df_time, x='Integration Time', y='Score', ax=axes[1])
-        axes[1].set_title("Score by Integration Time")
-        axes[1].set_xlabel("Integration Time (ms)")
-
-        # Plot 3: Boxplot for Measurement Type
-        df_type = df[(df['LED Current'] == best_led_current) &
-                     (df['Integration Time'] == best_int_time)]
-        sns.violinplot(data=df_type, x='Measurement Type', y='Score', ax=axes[2])
-        axes[2].set_title("Score by Measurement Type")
-        axes[2].set_xlabel("Measurement Type")
-        for i in range(3):
-            axes[i].set_ylim(YLIM)
-
-
-    # Call the inner function with your DataFrame and axes
-    plot_boxplots(df, axes)
-    plt.show()
-
-
-def make_box_plots_depr() -> None:
-    """
-    Generate violin plots for model performance scores by varying 'LED Current',
-    'Integration Time', and 'Measurement Type' for each sensor in a 3x3 grid.
-
-    Returns
-    -------
-    None
-        Displays a 3x3 figure of violin plots.
-
-    Notes
-    -----
-    - Each row represents one sensor.
-    - Columns represent variations for 'LED Current', 'Integration Time', and 'Measurement Type'.
-    - Best conditions are defined for the two parameters not being varied.
-    """
-    sensors = ["as7262", "as7263", "as7265x"]  # Sensor names
-    best_led_current = "12.5 mA"
-    best_int_time = 50
-    best_measure_type = "absorbance"
-
-    # Create a 3x3 subplot figure
-    fig, axes = plt.subplots(3, 3, figsize=(7, 8), sharey=True)
-    fig.suptitle("Model Scores by Sensor and Condition", fontsize=12, y=0.95)
-
-    def plot_boxplots(df: pd.DataFrame, axes_row: list[plt.Axes], sensor: str) -> None:
-        """
-        Plot violin plots for 'LED Current', 'Integration Time', and 'Measurement Type'
-        for a single sensor.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            The input DataFrame containing 'LED Current', 'Integration Time',
-            'Measurement Type', and 'Score'.
-        axes_row : list[plt.Axes]
-            A list of three matplotlib Axes objects for the current sensor row.
-        sensor : str
-            The name of the sensor being processed.
-
-        Returns
-        -------
-        None
-        """
-
-        if sensor == "as7263":
-            best_int_time = 250
-            best_led_current = "25 mA"
-        # Filter for LED Current variation
-        df_led = df[(df['Integration Time'] == best_int_time) &
-                    (df['Measurement Type'] == best_measure_type)]
-        sns.violinplot(data=df_led, x='LED Current', y='Score', ax=axes_row[0])
-        axes_row[0].set_title(f"{sensor.upper()} - LED Current")
-        # axes_row[0].set_xlabel("LED Current")
-        axes_row[0].set_ylabel("Score")
-
-        # Filter for Integration Time variation
-        df_time = df[(df['LED Current'] == best_led_current) &
-                     (df['Measurement Type'] == best_measure_type)]
-        sns.violinplot(data=df_time, x='Integration Time', y='Score', ax=axes_row[1])
-        axes_row[1].set_title(f"{sensor.upper()} - Integration Time")
-        # axes_row[1].set_xlabel("Integration Time (ms)")
-
-        # Filter for Measurement Type variation
-        df_type = df[(df['LED Current'] == best_led_current) &
-                     (df['Integration Time'] == best_int_time)]
-        sns.violinplot(data=df_type, x='Measurement Type', y='Score', ax=axes_row[2])
-        axes_row[2].set_title(f"{sensor.upper()} - Measurement Type")
-        # axes_row[2].set_xlabel("Measurement Type")
-
-        # Adjust the y-limits for clarity
-        for ax in axes_row:
-            ax.set_ylim([0.5, 1])
-
-    # Loop through each sensor, load data, and create plots
-    for i, sensor in enumerate(sensors):
-        df = pd.read_csv(f"ANOVA_data/ANOVA_{sensor}.csv")
-        plot_boxplots(df, axes[i], sensor)
-
-    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to fit title
-    fig.savefig("ANOVA.pdf", format='pdf')
-    plt.show()
 
 
 def make_box_plots_with_stats() -> None:
@@ -474,7 +337,7 @@ def make_box_plots_with_stats() -> None:
     best_int_time = 50
     best_measure_type = "absorbance"
 
-    fig, axes = plt.subplots(3, 3, figsize=(7, 8),
+    fig, axes = plt.subplots(3, 3, figsize=(7.5, 9),
                              sharey=True)
     fig.suptitle("Statistical Analysis of Best Conditions", fontsize=12, y=0.95)
 
@@ -496,8 +359,8 @@ def make_box_plots_with_stats() -> None:
         # Vary 'LED Current'
         df_led = df[(df['Integration Time'] == best_int_time) &
                     (df['Measurement Type'] == best_measure_type)]
-        df_led['LED Current']
-        pairs_led = [(a, b) for a in df_led['LED Current'].unique() for b in df_led['LED Current'].unique() if a < b]
+        # pairs_led = [(a, b) for a in df_led['LED Current'].unique()
+        # for b in df_led['LED Current'].unique() if a < b]
         sns.violinplot(data=df_led, x='LED Current', y='Score', ax=axes_row[0],
                        palette=violin_colors[sensor][0], legend=False)
         # add_stat_annotations(df_led, "LED Current", pairs_led, axes_row[0])
@@ -514,8 +377,9 @@ def make_box_plots_with_stats() -> None:
         df_time = df[(df['LED Current'] == best_led_current) &
                      (df['Measurement Type'] == best_measure_type)]
         # convert integration cyles to milliseconds
-        df_time['Integration Time'] = (2.8 * df['Integration Time']).astype(str) + " ms"
-        pairs_time = [(a, b) for a in df_time['Integration Time'].unique() for b in df_time['Integration Time'].unique() if a < b]
+        df_time['Integration Time'] = (2.8 * df['Integration Time']).astype(int).astype(str) + " ms"
+        pairs_time = [(a, b) for a in df_time['Integration Time'].unique()
+                      for b in df_time['Integration Time'].unique() if a < b]
 
         sns.violinplot(data=df_time, x='Integration Time', y='Score', ax=axes_row[1],
                        palette=violin_colors[sensor][1], legend=False)
@@ -530,8 +394,8 @@ def make_box_plots_with_stats() -> None:
         # Vary 'Measurement Type'
         df_type = df[(df['LED Current'] == best_led_current) &
                      (df['Integration Time'] == best_int_time)]
-        pairs_type = [(a, b) for a in df_type['Measurement Type'].unique()
-                      for b in df_type['Measurement Type'].unique() if a < b]
+        # pairs_type = [(a, b) for a in df_type['Measurement Type'].unique()
+        #               for b in df_type['Measurement Type'].unique() if a < b]
         sns.violinplot(data=df_type, x='Measurement Type', y='Score', ax=axes_row[2],
                        palette=violin_colors[sensor][2], legend=False)
         # add_stat_annotations(df_type, "Measurement Type", pairs_type, axes_row[2])
@@ -545,7 +409,8 @@ def make_box_plots_with_stats() -> None:
         for ax in axes_row:
             ax.set_ylim(YLIM)
 
-    def add_stat_annotations(df: pd.DataFrame, group_col: str, pairs: list[tuple], ax: plt.Axes) -> None:
+    def add_stat_annotations(df: pd.DataFrame, group_col: str,
+                             pairs: list[tuple], ax: plt.Axes) -> None:
         """
         Add statistical significance annotations to a plot.
 
@@ -588,16 +453,25 @@ def make_box_plots_with_stats() -> None:
     for i, sensor in enumerate(sensors):
         df = pd.read_csv(f"ANOVA_data/ANOVA_{sensor}.csv")
         # df['Integration Time'] = 2.8*df['Integration Time'].astype(int)
+        # call the inner function to make the plots
         plot_boxplots_with_stats(df, axes[i], sensor)
+        # add sensor label
+        axes[i][0].annotate(f"AS{sensor[2:]}", (0.03, 0.05),
+                            fontsize=12, xycoords='axes fraction')
 
     for i in range(3):  # each column
         axes[i][0].set_xticklabels(axes[i][0].get_xticklabels(), rotation=20, ha="center")
         axes[i][1].set_xticklabels(axes[i][1].get_xticklabels(), rotation=30, ha="center")
         axes[i][2].set_xticklabels(axes[i][2].get_xticklabels(), rotation=15, ha="center")
-        for j in range(3):  # first 2 rows
+
+        for j in range(3):  # remove labels
             axes[j][i].set_xlabel("")
             # axes[i][j].set_xticklabels(axes[i][j].get_xticklabels(), rotation=30, ha="center")
-
+            axes[i][j].annotate(f"{chr(j*3+i+97)})", (0.03, 1.0),
+                                fontsize=12, fontweight='bold',
+                                xycoords='axes fraction')
+            for side in ['top', 'right']:
+                axes[i][j].spines[side].set_visible(False)
     axes[0][0].set_title("LED Current")
     axes[0][1].set_title("Integration Time")
     axes[0][2].set_title("Data Type")
@@ -605,20 +479,23 @@ def make_box_plots_with_stats() -> None:
     # add legend
     # Manually create legend handles
     same_patch = mpatches.Patch(color=deep_blue, label='Similar (p > 0.05)')
-    different_patch = mpatches.Patch(color=deep_red, label='Different (p ≤ 0.01)')
+    # mid_patch = mpatches.Patch(color=deep_yellow, label='Different (p < 0.05)')
+    different_patch = mpatches.Patch(color=deep_red, label='Different (p < 0.01)')
     # Add the legend to the plot
-    axes[0][2].legend(handles=[same_patch, different_patch], title="Statistically:",
+    axes[2][2].legend(handles=[same_patch, different_patch], title="Statistically:",
                       title_fontsize='small',
-                      bbox_to_anchor=(1.0, -0.05), loc="lower right",
+                      bbox_to_anchor=(1.05, -0.05), loc="lower right",
                       fontsize='small', frameon=False)
-
 
     # axes[2][1].set_xlabel('Integration Time')
     # axes[2][1].set_xlabel('Data Type')
     # axes[2][0].set_xlabel('LED Current (mA)')
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
-    fig.savefig("ANOVA.pdf", format='pdf')
+    # plt.subplots_adjust(left=0.1, bottom=0.07, right=0.97, top=0.85,
+    #                     wspace=0.1, hspace=.2)
+
+    fig.savefig("ANOVA_best_conditions.jpg", dpi=600)
     plt.show()
 
 
@@ -691,7 +568,7 @@ def get_combined_anova_tables():
 def get_best_conditions() -> dict:
     """
     Combines the functionality to find:
-    1. The best conditions for each sensor across all leaves (best overall sensor conditions).
+    1. The best conditions for each sensor across all leaves (the best overall sensor conditions).
     2. The best overall conditions for all leaves and sensors combined.
 
     Returns:
@@ -706,7 +583,8 @@ def get_best_conditions() -> dict:
 
     # Print both results
     print("Best Overall Sensor Conditions:\n", best_conditions_dict['best_sensor_conditions'])
-    print("\nBest Overall Conditions for All Leaves and Sensors:\n", best_conditions_dict['best_overall_conditions'])
+    print("\nBest Overall Conditions for All Leaves and Sensors:\n",
+           best_conditions_dict['best_overall_conditions'])
     """
     # Get the DataFrame from the combined ANOVA tables
     df = get_combined_anova_tables()
@@ -783,8 +661,10 @@ def plot_performance_for_condition(condition_name, condition_best_scores):
             mean_scores.append(pd.Series(scores).mean())
             std_scores.append(pd.Series(scores).std())
         print('models: ', models)
-        # Plotting the mean and std of best scores for each regression model under the current condition
-        plt.errorbar(models, mean_scores, yerr=std_scores, fmt='o', capsize=5, elinewidth=2, markeredgewidth=2,
+        # Plotting the mean and std of best scores for each r
+        # egression model under the current condition
+        plt.errorbar(models, mean_scores, yerr=std_scores, fmt='o', capsize=5,
+                     linewidth=2, markeredgewidth=2,
                      label=f"{condition_name}: {condition_value}")
 
     plt.title(f'Mean and Std of Best Scores for Different {condition_name}')
@@ -798,7 +678,7 @@ def plot_performance_for_condition(condition_name, condition_best_scores):
 
 def plot_and_check_statistics_for_conditions() -> None:
     """
-    Plots bar graphs comparing the best overall conditions, best sensor conditions,
+    Plots bar graphs comparing the best overall conditions, the best sensor conditions,
     and the maximum score for each leaf. Additionally, performs statistical
     significance tests (paired t-test) for three comparisons:
     - Best leaf scores vs. best overall condition scores
@@ -807,7 +687,7 @@ def plot_and_check_statistics_for_conditions() -> None:
 
     The function will:
     - Plot bar graphs for each sensor showing the scores for the best overall condition,
-      best sensor-specific condition, and the maximum score for each leaf.
+      the best sensor-specific condition, and the maximum score for each leaf.
     - Print out the detailed conditions and statistical test results for each leaf.
     """
     # Get the DataFrame from combined ANOVA tables
@@ -846,7 +726,8 @@ def plot_and_check_statistics_for_conditions() -> None:
         print(best_overall_conditions)
 
         # Print the best sensor-specific condition for this sensor
-        sensor_condition = best_sensor_conditions[best_sensor_conditions['Sensor'] == sensor].iloc[0]
+        sensor_condition = best_sensor_conditions[
+            best_sensor_conditions['Sensor'] == sensor].iloc[0]
         print("Best Sensor Condition:")
         print(sensor_condition)
 
@@ -856,12 +737,16 @@ def plot_and_check_statistics_for_conditions() -> None:
             leaf_data = df[(df['Leaf'] == leaf) & (df['Sensor'] == sensor)]
 
             # --- Best Overall Conditions ---
-            best_overall_cond = leaf_data[filter_data(leaf_data, best_overall_conditions)]['Score'].mean()
-            best_overall_cond_std = leaf_data[filter_data(leaf_data, best_overall_conditions)]['Score'].std()
+            best_overall_cond = leaf_data[filter_data(
+                leaf_data, best_overall_conditions)]['Score'].mean()
+            best_overall_cond_std = leaf_data[filter_data(
+                leaf_data, best_overall_conditions)]['Score'].std()
 
             # --- Best Sensor Conditions ---
-            best_sensor_cond = leaf_data[filter_data(leaf_data, sensor_condition)]['Score'].mean()
-            best_sensor_cond_std = leaf_data[filter_data(leaf_data, sensor_condition)]['Score'].std()
+            best_sensor_cond = leaf_data[filter_data(
+                leaf_data, sensor_condition)]['Score'].mean()
+            best_sensor_cond_std = leaf_data[filter_data(
+                leaf_data, sensor_condition)]['Score'].std()
 
             # --- Best Leaf Condition (Max Score for the Leaf) ---
             best_leaf_cond = leaf_data.loc[leaf_data['Score'].idxmax()]
@@ -870,7 +755,8 @@ def plot_and_check_statistics_for_conditions() -> None:
             # Print the detailed conditions
             print(f"\nLeaf: {leaf}")
             print(f"Best Leaf Condition:")
-            print(best_leaf_cond.tolist())  # This prints the entire row including all relevant condition parameters
+            # This prints the entire row including all relevant condition parameters
+            print(best_leaf_cond.tolist())
 
             # Perform paired t-tests for statistical significance
             comparison_data = pd.DataFrame({
@@ -880,25 +766,31 @@ def plot_and_check_statistics_for_conditions() -> None:
             })
 
             # T-test: Best leaf vs. best overall
-            ttest_leaf_vs_overall = pg.ttest(comparison_data['Best_Leaf_Score'], comparison_data['Best_Overall_Score'], paired=True)
+            ttest_leaf_vs_overall = pg.ttest(comparison_data['Best_Leaf_Score'],
+                                             comparison_data['Best_Overall_Score'], paired=True)
             t_statistic_leaf_vs_overall = ttest_leaf_vs_overall['T'].iloc[0]
             p_value_leaf_vs_overall = ttest_leaf_vs_overall['p-val'].iloc[0]
 
             # T-test: Best leaf vs. best sensor
-            ttest_leaf_vs_sensor = pg.ttest(comparison_data['Best_Leaf_Score'], comparison_data['Best_Sensor_Score'], paired=True)
+            ttest_leaf_vs_sensor = pg.ttest(comparison_data['Best_Leaf_Score'],
+                                            comparison_data['Best_Sensor_Score'], paired=True)
             t_statistic_leaf_vs_sensor = ttest_leaf_vs_sensor['T'].iloc[0]
             p_value_leaf_vs_sensor = ttest_leaf_vs_sensor['p-val'].iloc[0]
 
             # T-test: Best sensor vs. best overall
-            ttest_sensor_vs_overall = pg.ttest(comparison_data['Best_Sensor_Score'], comparison_data['Best_Overall_Score'], paired=True)
+            ttest_sensor_vs_overall = pg.ttest(comparison_data['Best_Sensor_Score'],
+                                               comparison_data['Best_Overall_Score'], paired=True)
             t_statistic_sensor_vs_overall = ttest_sensor_vs_overall['T'].iloc[0]
             p_value_sensor_vs_overall = ttest_sensor_vs_overall['p-val'].iloc[0]
 
             # Print the statistical test results
             print(f"Statistical Tests for Leaf: {leaf}")
-            print(f"Leaf vs. Overall - T-Statistic: {t_statistic_leaf_vs_overall}, P-Value: {p_value_leaf_vs_overall}")
-            print(f"Leaf vs. Sensor - T-Statistic: {t_statistic_leaf_vs_sensor}, P-Value: {p_value_leaf_vs_sensor}")
-            print(f"Sensor vs. Overall - T-Statistic: {t_statistic_sensor_vs_overall}, P-Value: {p_value_sensor_vs_overall}")
+            print(f"Leaf vs. Overall - T-Statistic: {t_statistic_leaf_vs_overall}, "
+                  f"P-Value: {p_value_leaf_vs_overall}")
+            print(f"Leaf vs. Sensor - T-Statistic: {t_statistic_leaf_vs_sensor}, "
+                  f"P-Value: {p_value_leaf_vs_sensor}")
+            print(f"Sensor vs. Overall - T-Statistic: {t_statistic_sensor_vs_overall}, "
+                  f"P-Value: {p_value_sensor_vs_overall}")
 
             # Append data for plotting
             leaves.append(leaf)
@@ -916,7 +808,8 @@ def plot_and_check_statistics_for_conditions() -> None:
         bars1 = plt.bar(x, best_overall_scores, width=bar_width, label='Best Overall Conditions',
                         align='center', yerr=best_overall_std, capsize=5)
         bars2 = plt.bar([p + bar_width for p in x], best_leaf_scores, width=bar_width,
-                        label=f'Best {sensor} Conditions', align='center', yerr=best_leaf_std, capsize=5)
+                        label=f'Best {sensor} Conditions', align='center',
+                        yerr=best_leaf_std, capsize=5)
         bars3 = plt.bar([p + 2 * bar_width for p in x], max_leaf_scores, width=bar_width,
                         label='Max Leaf Condition', align='center', yerr=max_leaf_std, capsize=5)
 
@@ -934,8 +827,8 @@ def plot_and_check_statistics_for_conditions() -> None:
 
 def check_statistical_significance(df: pd.DataFrame) -> None:
     """
-    Checks the statistical significance between the best leaf scores and the best overall condition scores
-    using Pingouin's t-test for each sensor.
+    Checks the statistical significance between the best leaf scores and the
+    best overall condition scores using Pingouin's t-test for each sensor.
 
     Parameters:
     df (pd.DataFrame): DataFrame containing the scores and conditions.
@@ -986,7 +879,8 @@ def check_statistical_significance(df: pd.DataFrame) -> None:
 
             # Print the results
             print(
-                f"Leaf: {leaf}, Best Leaf Score: {best_leaf_score}, Best Overall Condition Score: {best_overall_score}")
+                f"Leaf: {leaf}, Best Leaf Score: {best_leaf_score}, "
+                f"Best Overall Condition Score: {best_overall_score}")
             print(f"T-Statistic: {t_statistic}, P-Value: {p_value}\n")
 
 
@@ -1027,7 +921,8 @@ def find_best_conditions_for_led_and_integration_time() -> None:
         print(f"\n=== Sensor: {sensor} ===")
 
         # Extract the best sensor-specific condition for this sensor
-        sensor_condition = best_sensor_conditions[best_sensor_conditions['Sensor'] == sensor].iloc[0]
+        sensor_condition = best_sensor_conditions[
+            best_sensor_conditions['Sensor'] == sensor].iloc[0]
 
         # Loop through each leaf
         for leaf in df['Leaf'].unique():
@@ -1035,7 +930,8 @@ def find_best_conditions_for_led_and_integration_time() -> None:
             leaf_data = df[(df['Leaf'] == leaf) & (df['Sensor'] == sensor)]
 
             # Group by LED Current and Integration Time and calculate the mean score
-            grouped = leaf_data.groupby(['LED Current', 'Integration Time'])['Score'].mean().reset_index()
+            grouped = leaf_data.groupby(['LED Current', 'Integration Time']
+                                        )['Score'].mean().reset_index()
 
             # --- Best Leaf Condition ---
             # Find the combination with the highest mean score
@@ -1068,22 +964,29 @@ def find_best_conditions_for_led_and_integration_time() -> None:
 
             # Print details for the current leaf
             print(f"\nLeaf: {leaf}")
-            print(f"Best Leaf Condition: LED Current = {best_leaf_led}, Integration Time = {best_leaf_integration}, Score = {best_leaf_score}")
+            print(f"Best Leaf Condition: LED Current = {best_leaf_led}, "
+                  f"Integration Time = {best_leaf_integration}, Score = {best_leaf_score}")
             print(f"Best Overall Score: {best_overall_cond}")
             print(f"Best Sensor Score: {best_sensor_cond}")
 
             # Statistical comparisons using paired t-tests
             # 1. Leaf vs Overall
-            leaf_vs_overall = pg.ttest(leaf_data['Score'], [best_overall_cond] * len(leaf_data), paired=True)
-            print(f"Leaf vs. Overall: T = {leaf_vs_overall['T'][0]}, P-Value = {leaf_vs_overall['p-val'][0]}")
+            leaf_vs_overall = pg.ttest(leaf_data['Score'],
+                                       [best_overall_cond] * len(leaf_data), paired=True)
+            print(f"Leaf vs. Overall: T = {leaf_vs_overall['T'][0]}, "
+                  f"P-Value = {leaf_vs_overall['p-val'][0]}")
 
             # 2. Leaf vs Sensor
-            leaf_vs_sensor = pg.ttest(leaf_data['Score'], [best_sensor_cond] * len(leaf_data), paired=True)
-            print(f"Leaf vs. Sensor: T = {leaf_vs_sensor['T'][0]}, P-Value = {leaf_vs_sensor['p-val'][0]}")
+            leaf_vs_sensor = pg.ttest(leaf_data['Score'],
+                                      [best_sensor_cond] * len(leaf_data), paired=True)
+            print(f"Leaf vs. Sensor: T = {leaf_vs_sensor['T'][0]}, "
+                  f"P-Value = {leaf_vs_sensor['p-val'][0]}")
 
             # 3. Sensor vs Overall
-            sensor_vs_overall = pg.ttest([best_sensor_cond] * len(leaf_data), [best_overall_cond] * len(leaf_data), paired=True)
-            print(f"Sensor vs. Overall: T = {sensor_vs_overall['T'][0]}, P-Value = {sensor_vs_overall['p-val'][0]}")
+            sensor_vs_overall = pg.ttest([best_sensor_cond] * len(leaf_data),
+                                         [best_overall_cond] * len(leaf_data), paired=True)
+            print(f"Sensor vs. Overall: T = {sensor_vs_overall['T'][0]}, "
+                  f"P-Value = {sensor_vs_overall['p-val'][0]}")
 
             # Append data for plotting
             leaves.append(leaf)
@@ -1101,9 +1004,11 @@ def find_best_conditions_for_led_and_integration_time() -> None:
         bars1 = plt.bar(x, best_overall_scores, width=bar_width, label='Best Overall Conditions',
                         align='center', yerr=best_overall_std, capsize=5)
         bars2 = plt.bar([p + bar_width for p in x], best_sensor_scores, width=bar_width,
-                        label=f'Best {sensor} Conditions', align='center', yerr=best_sensor_std, capsize=5)
+                        label=f'Best {sensor} Conditions', align='center',
+                        yerr=best_sensor_std, capsize=5)
         bars3 = plt.bar([p + 2 * bar_width for p in x], best_leaf_scores, width=bar_width,
-                        label='Best Leaf Conditions', align='center', yerr=best_leaf_std, capsize=5)
+                        label='Best Leaf Conditions', align='center',
+                        yerr=best_leaf_std, capsize=5)
 
         # Add labels and title
         plt.xticks([p + bar_width for p in x], leaves)
@@ -1119,13 +1024,15 @@ def find_best_conditions_for_led_and_integration_time() -> None:
 
 def perform_anova_and_tukey_test(df: pd.DataFrame, factor: str, sensor: str = None) -> None:
     """
-    Performs an ANOVA test on the specified factor for a given sensor (or all sensors if not specified),
+    Performs an ANOVA test on the specified factor for a given sensor
+    (or all sensors if not specified),
     and if significant, runs Tukey's HSD test to compare different levels.
 
     Parameters:
     df (pd.DataFrame): The DataFrame containing the data.
     factor (str): The factor to compare between, such as "LED Current" or "Integration Time".
-    sensor (str, optional): The specific sensor to analyze. If None, the analysis is performed across all sensors.
+    sensor (str, optional): The specific sensor to analyze.
+    If None, the analysis is performed across all sensors.
 
     Returns:
     None
@@ -1164,19 +1071,22 @@ def perform_anova_and_tukey_test(df: pd.DataFrame, factor: str, sensor: str = No
         print("\nInterpretation:")
         for index, row in tukey_results.iterrows():
             if row['p-tukey'] < 0.05:
-                print(f"{row['A']} performed significantly better than {row['B']} (p = {row['p-tukey']:.3f}).")
+                print(f"{row['A']} performed significantly better than {row['B']} "
+                      f"(p = {row['p-tukey']:.3f}).")
             else:
-                print(f"No significant difference between {row['A']} and {row['B']} (p = {row['p-tukey']:.3f}).")
+                print(f"No significant difference between {row['A']} and {row['B']} "
+                      f"(p = {row['p-tukey']:.3f}).")
     else:
-        print(f"\nThe ANOVA test is not significant (p = {p_value:.3f}). Tukey's HSD test will not be performed.")
+        print(f"\nThe ANOVA test is not significant (p = {p_value:.3f}). "
+              f"Tukey's HSD test will not be performed.")
 
 
 if __name__ == '__main__':
     # make_anova_table_files()
-    # print_pg_anova_table('as7263')
-    make_box_plots_with_stats()
-    ham
-    if True:
+    print_pg_anova_table('as7265x')
+    # make_box_plots_with_stats()
+
+    if False:
         # List of conditions to iterate over and generate plots for each
         conditions_to_plot = ['LED Current', 'Integration Time', 'Measurement Type']
 
