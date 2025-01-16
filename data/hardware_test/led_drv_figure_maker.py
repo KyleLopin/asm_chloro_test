@@ -47,14 +47,15 @@ for i in range(3):
     plt.plot(aligned_times[i], aligned_voltages[i], label=labels[i],
              color=colors[i])
 
-plt.text(-0.05, 1.1, "12.5 mA")
-plt.text(0.13, 1.1, "25 mA")
-plt.text(0.28, 1.1, "50 mA")
-plt.text(0.42, 1.1, "100 mA")
-
+plt.text(-0.02, 1.1, "12.5 mA")
+plt.text(0.14, 1.1, "25 mA")
+plt.text(0.29, 1.1, "50 mA")
+plt.text(0.43, 1.1, "100 mA")
+for spine in ['top', 'right']:
+    plt.gca().spines[spine].set_visible(False)
 
 # add line to show the cutoff line
-plt.axhline(0.3, ls='--', color='red', label="sink voltage limit")
+plt.axhline(0.3, ls='--', color='red', lw=2, label="Sink Pin\nVoltage Limit")
 
 plt.xlabel('Time (seconds)')
 plt.ylabel('Voltage (V)')
@@ -67,4 +68,4 @@ plt.xlim([-0.1, 0.6])
 
 plt.tight_layout()
 # plt.show()
-plt.savefig("led_drv_pin.pdf", format='pdf', dpi=300)
+plt.savefig("led_drv_pin.jpeg", dpi=600)

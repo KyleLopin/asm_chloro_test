@@ -495,7 +495,7 @@ def make_box_plots_with_stats() -> None:
     # plt.subplots_adjust(left=0.1, bottom=0.07, right=0.97, top=0.85,
     #                     wspace=0.1, hspace=.2)
 
-    fig.savefig("ANOVA_best_conditions.jpg", dpi=600)
+    fig.savefig("ANOVA_best_conditions.jpeg", dpi=600)
     plt.show()
 
 
@@ -1083,9 +1083,9 @@ def perform_anova_and_tukey_test(df: pd.DataFrame, factor: str, sensor: str = No
 
 if __name__ == '__main__':
     # make_anova_table_files()
-    print_pg_anova_table('as7265x')
-    # make_box_plots_with_stats()
-
+    # print_pg_anova_table('as7265x')
+    make_box_plots_with_stats()
+    ham
     if False:
         # List of conditions to iterate over and generate plots for each
         conditions_to_plot = ['LED Current', 'Integration Time', 'Measurement Type']

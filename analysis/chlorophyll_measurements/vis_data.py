@@ -1,7 +1,8 @@
 # Copyright (c) 2023 Kyle Lopin (Naresuan University) <kylel@nu.ac.th>
 
 """
-Visualize chlorophyll data set
+Visualize chlorophyll data set. Look at saved file not shown image, they can
+be pretty different
 """
 
 __author__ = "Kyle Vitautas Lopin"
@@ -21,15 +22,16 @@ from get_data import get_data
 plt.style.use('bmh')
 LEAVE = "Banana"
 ALL_LEAVES = tuple(("Mango", "Banana", "Jasmine", "Rice", "Sugarcane"))
-AXIS_LABEL_SIZE = 10
+AXIS_LABEL_SIZE = 8
 LEGEND_FONT_SIZE = 9
-AX_TITLE_SIZE = 12
-R2_ANNOTATE_POSITION = (.60, .08)
+AX_TITLE_SIZE = 11
+R2_ANNOTATE_POSITION = (.6, .07)
 MAE_ANNOTATE_POSITION = (.53, .7)
-FIGURE_LABEL_ANNOTATE_POSITION_L = (0.0, 1.05)
-FIGURE_LABEL_ANNOTATE_POSITION_R = (-0.1, 1.05)
+FIGURE_LABEL_ANNOTATE_POSITION_L = (-0.01, 1.04)
+FIGURE_LABEL_ANNOTATE_POSITION_R = (-0.01, 1.04)
 BIN_COUNTS = [0, 10, 20, 30, 40]
 BIN_Y_LIM = [0, 45]
+SCORES_FONT_SIZE = 9
 
 
 # helper functions
@@ -320,7 +322,8 @@ def display_r2(original_df: pd.DataFrame, ax: plt.Axes,
     r2_pruned = r2_score(x_pruned, y_pruned)
     r2_string = f"r\u00B2 original = {r2_original:.2f}\n" \
                 f"r\u00B2 final = {r2_pruned:.2f}"
-    ax.annotate(r2_string, R2_ANNOTATE_POSITION, xycoords='axes fraction')
+    ax.annotate(r2_string, R2_ANNOTATE_POSITION, xycoords='axes fraction',
+                fontsize=SCORES_FONT_SIZE)
 
 
 def display_mea(original_df: pd.DataFrame, ax: plt.Axes,
@@ -345,7 +348,9 @@ def display_mea(original_df: pd.DataFrame, ax: plt.Axes,
     mae_pruned = mean_absolute_error(x_pruned, y_pruned)
     mae_string = f"MAE original = {mae_original:.2f}\n" \
                  f"MAE final = {mae_pruned:.2f}"
-    ax.annotate(mae_string, MAE_ANNOTATE_POSITION, xycoords='axes fraction')
+    ax.annotate(mae_string, MAE_ANNOTATE_POSITION,
+                fontsize=SCORES_FONT_SIZE,
+                xycoords='axes fraction')
 
 
 def plot_both_leaf_graphs(_df: pd.DataFrame, axes: tuple[plt.Axes, plt.Axes] = None,
@@ -365,7 +370,7 @@ def plot_both_leaf_graphs(_df: pd.DataFrame, axes: tuple[plt.Axes, plt.Axes] = N
 
 def plot_all_leaves(column_name: str = "Total Chlorophyll (µg/cm2)"):
     """ Make final figure to show chlorophyll levels"""
-    _, axes = plt.subplots(5, 2, figsize=(7.5, 10))
+    _, axes = plt.subplots(5, 2, figsize=(7, 10))
     max_residue_range = get_residue_range()
     _use_columns = ["Total Chlorophyll (µg/cm2)", "Spot", "Leaf No."]
     if column_name not in _use_columns:
@@ -385,7 +390,9 @@ def plot_all_leaves(column_name: str = "Total Chlorophyll (µg/cm2)"):
         # if row != 0:  # the histogram title is on the top
         axes[row][1].annotate(f"{chr(row+102)})", FIGURE_LABEL_ANNOTATE_POSITION_R,
                               xycoords='axes fraction', fontsize=12, fontweight='bold')
-
+        for l in [0, 1]:
+            for spine in ['top', 'right']:
+                axes[row][l].spines[spine].set_visible(False)
         # plot histograms
         if row == 0:  # add a title to the first graph
             plot_histogram_residues(data, axes[row][1],
@@ -424,6 +431,7 @@ if __name__ == '__main__':
     # plot_both_leaf_graphs(data, max_range=residue_range)
     plot_all_leaves(column_name='Total Chlorophyll (µg/cm2)')
     # plot_all_leaves(column_name='Chlorophyll b (µg/cm2)')
-    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.04, hspace=0.35, wspace=0.2,
+                        top=0.97, left=0.08, right=0.98)
     # plt.show()
-    plt.savefig("reference_chlorophyll_r2.pdf", format='pdf')
+    plt.savefig("reference_chlorophyll.jpeg", dpi=600)

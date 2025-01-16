@@ -5,12 +5,14 @@ Module Name: outlier_removal
 Description: This module provides functions for removing outliers from regression
 models based on residuals.
 Author: Kyle Lopin (Naresuan University) <kylel@nu.ac.th>
-Copyright (c) 2023
+Copyright (c) 2024-5
 
 Functions:
 - remove_outliers_from_model: Removes outliers from a regression model based on residuals.
 - mahalanobis_outlier_removal: Removes outliers from a DataFrame based on Mahalanobis distance.
 - calculate_residues: Calculate residuals for each row in a DataFrame based on group-wise means.
+
+To make manuscript figure 6 use: make_manuscript_figure
 """
 
 __author__ = "Kyle Vitautas Lopin"
@@ -34,7 +36,6 @@ from sklearn.linear_model import LinearRegression
 # local files
 import get_data
 import visualize_raw_data
-ssl._create_default_https_context = ssl._create_unverified_context
 # figure formatting constants
 COLOR_BAR_AXIS = [.90, .1, 0.02, 0.8]
 
@@ -49,7 +50,6 @@ def remove_outliers_from_model(regressor: RegressorMixin,
                                cutoff: float = 3.0,
                                remove_recursive: bool = False,
                                verbose: bool = False,
-                               show_hist: bool = False,
                                ) -> tuple[pd.DataFrame, pd.Series,
                                           pd.Series]:
     """
@@ -180,8 +180,8 @@ def calculate_residues(x: pd.DataFrame | pd.Series,
 
 
 def remove_outliers_from_residues(x, y, groups,
-                                  regr_model: RegressorMixin=LinearRegression(),
-                                  verbose: bool=False):
+                                  regr_model: RegressorMixin = LinearRegression(),
+                                  verbose: bool = False):
     if verbose:
         initial_score = regr_model.fit(x, y).score(x, y)
         initial_samples = x.shape[0]
@@ -202,10 +202,13 @@ def vis_outlier():
     for leaf in ["mango", "sugarcane"]:
         for sensor in SENSORS:
             led = "White LED"
+            int_time = 50
             if sensor == "as7265x":
                 led = "b'White IR'"
+            elif sensor == "as7263":
+                int_time = 150
 
-            x, y, groups = get_data.get_x_y(sensor=sensor, int_time=50, led=led,
+            x, y, groups = get_data.get_x_y(sensor=sensor, int_time=int_time, led=led,
                                             led_current="12.5 mA", leaf=leaf,
                                             measurement_type="reflectance",
                                             send_leaf_numbers=True)
@@ -245,7 +248,7 @@ def make_manuscript_figure(leaf: str = "mango"):
 
     color_map, map_norm = visualize_raw_data.make_color_map(0, 100)
 
-    ###### INNER FUNCTION
+    # =========== INNER FUNCTION
     def make_outlier_plot(x: pd.DataFrame, y: pd.Series,
                           use_residue: bool, ax: plt.Axes,
                           groups: pd.Series | None = None):
@@ -317,11 +320,13 @@ def make_manuscript_figure(leaf: str = "mango"):
 
     for sensor in SENSORS:
         led = "White LED"
+        int_time = 50
         if sensor == "as7265x":
             led = "b'White IR'"
-        pls = PLSRegression(n_components=6)
-
-        x, y, groups = get_data.get_x_y(sensor=sensor, int_time=50, led=led,
+        elif sensor == "as7263":
+            int_time = 150
+        # get the data
+        x, y, groups = get_data.get_x_y(sensor=sensor, int_time=int_time, led=led,
                                         led_current="12.5 mA", leaf=leaf,
                                         measurement_type="reflectance",
                                         send_leaf_numbers=True)
@@ -329,21 +334,19 @@ def make_manuscript_figure(leaf: str = "mango"):
         wavelengths = [w.split()[0] for w in x.columns]
         x_wavelengths = [int(wavelength.split()[0]) for wavelength in wavelengths]
 
-
-
         if sensor == "as7262":  # DRY yourself, its late
             # graph outliers based on Mahalanobis distances only
             make_outlier_plot(x, y, use_residue=False, ax=ax1, groups=groups)
             ax1.set_xticks(ticks=x_wavelengths, labels=[])
             make_outlier_plot(x, y, use_residue=True, ax=ax2, groups=groups)
-            ax2.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=30)
+            ax2.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=35)
             ax2.set_xlabel("Wavelengths (nm)", fontsize=12)
 
         elif sensor == 'as7263':
             make_outlier_plot(x, y, use_residue=False, ax=ax3, groups=groups)
             ax3.set_xticks(ticks=x_wavelengths, labels=[])
             make_outlier_plot(x, y, use_residue=True, ax=ax4, groups=groups)
-            ax4.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=30)
+            ax4.set_xticks(ticks=x_wavelengths, labels=wavelengths, rotation=35)
             ax4.set_xlabel("Wavelengths (nm)", fontsize=12)
 
         elif sensor == "as7265x":
@@ -368,13 +371,13 @@ def make_manuscript_figure(leaf: str = "mango"):
                                          ['a', 'b', 'c', 'd', 'e', 'f'])):
         # weird \n are to align all text on top
         condition = "Outliers\n(Spectrum)"
-        coords = [(0.02, .72), (0.11, .72)]
+        coords = [(0.02, .70), (0.11, .75)]
         if i in [4, 5]:
-            coords = [(0.03, .72), (0.08, .72)]
+            coords = [(0.03, .70), (0.08, .75)]
         if i % 2 == 1:  # odd numbers are calculated by residues
             condition = "Outliers\n(Residues)"
         ax.annotate(f"{letter})\n", coords[0], xycoords='axes fraction',
-                    fontsize=12)
+                    fontsize=12, fontweight='bold')
         ax.annotate(condition, coords[1], xycoords='axes fraction',
                     fontsize=10)
 
@@ -399,8 +402,8 @@ def make_manuscript_figure(leaf: str = "mango"):
     fig.subplots_adjust(left=0.1, wspace=0.26, right=0.85, hspace=0.24)
 
     # plt.tight_layout()
-    plt.show()
-    # fig.savefig("Outlier.pdf", dpi=300, format='pdf')
+    fig.savefig("outlier_detection.jpeg", dpi=600)
+    # plt.show()
 
 
 def pickle_cleaned_dataset(output_filename="final_dataset.pkl"):
@@ -432,31 +435,35 @@ def pickle_cleaned_dataset(output_filename="final_dataset.pkl"):
     for sensor in SENSORS:
         data[sensor] = {}  # Create a sub-dictionary for the current sensor
         led = "White LED"  # Default LED setting
-
+        int_time = 50
         # Adjust LED setting for specific sensor
         if sensor == "as7265x":
             led = "b'White IR'"
+        elif sensor == "as7263":
+            int_time = 250  # choose different int_time
 
         # Iterate over all leaves
         for leaf in ALL_LEAVES:
             # Retrieve x (features), y (target), and group information
             x, y, groups = get_data.get_x_y(
                 sensor=sensor,
-                int_time=50,
+                int_time=int_time,
                 led=led,
                 led_current="12.5 mA",
                 leaf=leaf,
                 measurement_type="reflectance",
                 send_leaf_numbers=True
             )
-            # convert x to absorbance
-            x = -np.log10(x)
+
 
             # Calculate residuals for each group
             residues = calculate_residues(x, groups)
 
             # Apply Mahalanobis outlier removal on residuals
             mask = mahalanobis_outlier_removal(residues)
+
+            # convert x to absorbance
+            x = -np.log10(x)
 
             # Store cleaned data in the dictionary
             data[sensor][leaf] = {
@@ -473,9 +480,9 @@ def pickle_cleaned_dataset(output_filename="final_dataset.pkl"):
 if __name__ == '__main__':
     # pickle_cleaned_dataset()
     # plt.style.use('seaborn-v0_8-whitegrid')
-    make_manuscript_figure("rice")
-
+    make_manuscript_figure("mango")
     # vis_outlier()
+
     # for sensor in SENSORS:
     #     for leaf in ALL_LEAVES:
     #         led = "White LED"

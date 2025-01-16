@@ -387,6 +387,7 @@ def make_chloro_pruned_and_average_files():
 
 
 if __name__ == '__main__':
+    pass
     # data = get_data(LEAVE)
     # # data = add_leave_averages(data)
     # pruned_df, removed_idx = remove_outliers(data)
@@ -399,4 +400,4 @@ if __name__ == '__main__':
     #     leaf_number = data.iloc[idx]["Leaf No."]
     #     print(f"leaf {leaf_number} data, index {idx} removed")
     #     print(data[data["Leaf No."] == leaf_number])
-    make_chloro_pruned_and_average_files()
+    # make_chloro_pruned_and_average_files()

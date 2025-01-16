@@ -32,20 +32,23 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from sklearn.cross_decomposition import PLSRegression
-from sklearn.linear_model import LassoLarsIC
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 # local files
 import get_data
 import helper_functions
-import preprocessors
+import remove_outliers
 SENSORS = ["as7262", "as7263", "as7265x"]
 LEAVES = ["banana", "jasmine", "mango", "rice", "sugarcane"]
 pd.set_option('display.max_rows', 500)
-N_SPLITS = 10  # set to 400 for low variance, 10 to be quick
+N_SPLITS = 200  # set to 100 for low variance, 10 to be quick
+
+pls_n_comps = {"as7262": {"banana": 6, "jasmine": 4, "mango": 5, "rice": 6, "sugarcane": 6},
+               "as7263": {"banana": 5, "jasmine": 5, "mango": 5, "rice": 5, "sugarcane": 5},
+               "as7265x": {"banana": 8, "jasmine": 14, "mango": 11, "rice": 6, "sugarcane": 6}}
 
 
-def create_validation_heatmaps(filename: str="") -> None:
+def create_validation_heatmaps(filename: str = "") -> None:
     """
     Load validation scores from an Excel file and create heatmaps for R² and MAE scores.
 
@@ -58,7 +61,8 @@ def create_validation_heatmaps(filename: str="") -> None:
     Returns
     -------
     None
-        Displays the heatmaps. Optionally saves them to the specified file if `filename` is provided.
+        Displays the heatmaps.
+        Optionally saves them to the specified file if `filename` is provided.
 
     Notes
     -----
@@ -86,12 +90,14 @@ def create_validation_heatmaps(filename: str="") -> None:
     r2_data.set_index("Leaf", inplace=True)
     mae_data.set_index("Leaf", inplace=True)
     # print(r2_data)
+    for df in [r2_data, mae_data]:
+        df.index = [leaf.capitalize() for leaf in df.index]
 
     # Create heatmaps
     plot_heatmaps(r2_data, mae_data, filename=filename)
 
 
-def make_table(sensors: list[str], filename: str=None) -> None:
+def make_table(sensors: list[str], filename: str = None) -> None:
     """
         Evaluates regression models for a list of sensors across multiple leaves,
         calculates R² and MAE scores, and generates heatmaps of the results.
@@ -113,9 +119,11 @@ def make_table(sensors: list[str], filename: str=None) -> None:
         Notes
         -----
         - For each sensor and leaf combination, the function evaluates a regression model using
-          partial least squares regression (PLS) with specific configurations based on the sensor type.
+          partial least squares regression (PLS) with specific configurations
+          based on the sensor type.
         - Data for each sensor and leaf is preprocessed and scaled before model evaluation.
-        - The results are stored in a DataFrame, which is then pivoted to create tables for R² and MAE scores.
+        - The results are stored in a DataFrame, which is then pivoted to create tables
+          for R² and MAE scores.
         - Heatmaps for R² and MAE are generated and displayed with the function plot_heatmaps.
         """
     # Initialize an empty list to store results
@@ -129,12 +137,12 @@ def make_table(sensors: list[str], filename: str=None) -> None:
             led = "White LED"
 
             if sensor == "as7262":
-                regressor = PLSRegression(n_components=5)
+                regressor = PLSRegression(n_components=pls_n_comps[sensor][leaf])
             elif sensor == "as7263":
-                regressor = PLSRegression(n_components=5)
+                regressor = PLSRegression(n_components=pls_n_comps[sensor][leaf])
             elif sensor == "as7265x":
                 led = "b'White IR'"
-                regressor = PLSRegression(n_components=10)
+                regressor = PLSRegression(n_components=pls_n_comps[sensor][leaf])
                 # regressor = LassoLarsIC("aic")
                 # regressor = ARDRegression(lambda_2=0.001)
             elif sensor in ["as72651", "as72652", "as72653"]:
@@ -225,16 +233,24 @@ def make_table(sensors: list[str], filename: str=None) -> None:
 
     print("\nMAE Scores Table:")
     print(pivot_df_mae)
+
     # plot_grouped_bar_charts(results_df)
     r2_pivot = results_df.pivot(index='Leaf', columns='Sensor', values='R2')
     mae_pivot = results_df.pivot(index='Leaf', columns='Sensor', values='MAE')
+    for df in [r2_pivot, mae_pivot]:
+        # Capitalize "AS" in the column names
+        df.columns = [col.replace('as', 'AS') for col in df.columns]
 
+        # Capitalize leaf names in the index
+        df.index = [leaf.capitalize() for leaf in df.index]
     plot_heatmaps(r2_pivot, mae_pivot, filename=filename)
 
 
-def plot_heatmaps(r2_data: pd.DataFrame, mae_data: pd.DataFrame, filename: str="") -> None:
+def plot_heatmaps(r2_data: pd.DataFrame, mae_data: pd.DataFrame,
+                  filename: str = "", axes=None) -> None:
     """
-    Plots two heatmaps side by side: one for R² and one for MAE.
+    Plots heatmaps for R² and MAE. If axes is provided, the heatmaps are plotted on the given axes.
+    Otherwise, subplots are created automatically.
 
     Parameters
     ----------
@@ -245,18 +261,21 @@ def plot_heatmaps(r2_data: pd.DataFrame, mae_data: pd.DataFrame, filename: str="
     filename : str, optional
         The name of the file to save the heatmaps as a PDF. If a falsy value
         (e.g., "" or None) is provided, the heatmaps are not saved (default is "").
+    axes : array-like, optional
+        The axes on which to plot the heatmaps. If None, subplots are created.
 
     Returns
     -------
     None
         Displays the heatmaps and optionally saves them to a file.
     """
-    # Create subplots for the heatmaps
-    fig, axes = plt.subplots(1, 2, figsize=(7, 3))
+    # If axes is None, create subplots
+    if axes is None:
+        fig, axes = plt.subplots(1, 2, figsize=(7, 3))
 
     # R2 Heatmap
     sns.heatmap(r2_data, annot=True, fmt=".2f", cmap="coolwarm",
-                cbar_kws={"label": "$R^2$"}, ax=axes[0])
+                cbar_kws={"label": "$R^2$ Score"}, ax=axes[0])
     axes[0].set_title("Validation $R^2$ Scores")
 
     # MAE Heatmap
@@ -265,6 +284,7 @@ def plot_heatmaps(r2_data: pd.DataFrame, mae_data: pd.DataFrame, filename: str="
                 ax=axes[1])
     axes[1].set_title("Validation MAE Scores")
     # axes[1].set_xlabel("Sensor")
+    axes[0].set_ylabel("Leaf Species", fontsize=12)
     axes[1].set_ylabel("")
     for i in [0, 1]:
         axes[i].set_xlabel("Sensors")
@@ -277,13 +297,14 @@ def plot_heatmaps(r2_data: pd.DataFrame, mae_data: pd.DataFrame, filename: str="
     # plt.tight_layout()
     plt.subplots_adjust(left=0.15, wspace=0.52, bottom=0.2)
     if filename:
-        fig.savefig("validation_scores.pdf", format='pdf')
+        fig.savefig(filename, dpi=600)
     plt.show()
 
 
 def plot_grouped_bar_charts(data):
     """
-    Plot two grouped bar charts side-by-side for R2 and MAE values for each leaf and sensor combination.
+    Plot two grouped bar charts side-by-side for R2 and MAE values
+    for each leaf and sensor combination.
 
     Parameters:
         data (pd.DataFrame): A DataFrame containing the following columns:
@@ -350,5 +371,12 @@ def plot_grouped_bar_charts(data):
 
 
 if __name__ == '__main__':
-    # make_table(["as7265x", "as72651", "as72652", "as72653"])
-    create_validation_heatmaps()
+    # ["as7265x", "as72651", "as72652", "as72653"]
+    # make_table(["as7262", "as7263", "as7265x"],
+    #            filename="3_sensors.pdf")
+    # make_table(["as7262"])
+    #            # filename="Individual_AS7265x_chips.pdf")
+    # make_table(["as7265x", "as72651", "as72652", "as72653"],
+    #            filename="as7265x_individual_sensors.jpeg")
+
+    create_validation_heatmaps(filename="validation_scores.jpeg")
