@@ -19,15 +19,26 @@ The module includes an example usage scenario if executed directly, demonstratin
 
 __author__ = "Kyle Vitautas Lopin"
 
+# standard libraries
+from pathlib import Path
+import sys
+
+# installed files
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, clone, RegressorMixin
-from sklearn.linear_model import LinearRegression
+from sklearn.base import clone, RegressorMixin
 from sklearn.metrics import mean_absolute_error, r2_score
-from sklearn.model_selection import GroupShuffleSplit, train_test_split
+from sklearn.model_selection import train_test_split, ShuffleSplit
 
 # local files
 from global_classes import GroupedData
+# Get the current file's directory
+current_dir = Path(__file__).resolve().parent.parent.parent.parent
+# Navigate up one or more directories (e.g., go up two levels)
+package_dir = current_dir.parent.parent / "PyCharmProjects" / "stratified_group_shuffle_split"
+# Add the package directory to sys.path
+sys.path.append(str(package_dir))
+from stratified_group_shuffle_split import StratifiedGroupShuffleSplit
 
 
 def filter_df(selected_row, df, exclude_columns=["Score"]):
@@ -111,7 +122,12 @@ def group_based_train_test_split(data: GroupedData, test_size=0.2, random_state=
         """
         An inner helper function that yields training and testing GroupedData for the specified number of splits.
         """
-        splitter = GroupShuffleSplit(test_size=test_size, n_splits=n_splits, random_state=random_state)
+
+        splitter = StratifiedGroupShuffleSplit(
+            test_size=test_size, n_splits=n_splits,  random_state=random_state,
+            n_bins=10
+        )
+
         for train_idx, test_idx in splitter.split(data.x, data.y, groups=data.group):
             # Create GroupedData instances for training and testing sets
             train_data = GroupedData(data.x.iloc[train_idx], data.y.iloc[train_idx], data.group.iloc[train_idx])
@@ -187,9 +203,11 @@ def predict_train_test_with_grouping(
 def evaluate_model_scores(x: pd.DataFrame, y: pd.Series,
                           groups: pd.Series, regressor,
                           n_splits=10, test_size=0.1,
-                          group_by_mean=False):
+                          group_by_mean=False, splitter=None,
+                          random_state=None):
     """
-    Evaluate the regression model using GroupShuffleSplit and return statistical scores for both training and testing sets.
+    Evaluate the regression model using StratifiedGroupShuffleSplit and return statistical
+    scores for both training and testing sets.
 
     Args:
         x (pd.DataFrame): Feature matrix.
@@ -219,8 +237,11 @@ def evaluate_model_scores(x: pd.DataFrame, y: pd.Series,
     test_r2_scores = []
     test_mae_scores = []
 
-    # Create the GroupShuffleSplit object outside the loop
-    splitter = GroupShuffleSplit(test_size=test_size, n_splits=n_splits, random_state=None)
+    if not splitter:
+        splitter = StratifiedGroupShuffleSplit(
+            test_size=test_size, n_splits=n_splits,
+            n_bins=10, random_state=random_state
+        )
 
     for train_idx, test_idx in splitter.split(x, y, groups):
         # Train and test data
@@ -235,7 +256,8 @@ def evaluate_model_scores(x: pd.DataFrame, y: pd.Series,
         # else:
         regressor = clone(regressor)
 
-        regressor.fit(x_train, y_train.iloc[:, 0])
+        # regressor.fit(x_train, y_train.iloc[:, 0])
+        regressor.fit(x_train, y_train)
         # Make predictions on the training and test data
         y_train_pred = regressor.predict(x_train)
         y_test_pred = regressor.predict(x_test)
@@ -244,6 +266,7 @@ def evaluate_model_scores(x: pd.DataFrame, y: pd.Series,
             # Convert predictions to pandas Series with the original group labels as the index
             y_train_pred = pd.Series(y_train_pred.flatten(), index=y_train.index
                                      ).groupby('group').mean()
+
             y_test_pred = pd.Series(y_test_pred.flatten(), index=y_test.index
                                     ).groupby('group').mean()
             # Update the true values accordingly
