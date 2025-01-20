@@ -1,8 +1,8 @@
-# Copyright (c) 2023 Kyle Lopin (Naresuan University) <kylel@nu.ac.th>
+# Copyright (c) 2023-5 Kyle Lopin (Naresuan University) <kylel@nu.ac.th>
 
 """
-Make functions to add the average Total chlorophyll, chlorophyll a, and chlorophyll b levels to the
-spectrum files.
+Make functions to add the average Total chlorophyll, chlorophyll a,
+and chlorophyll b levels to the spectrum files.
 
 Make the join call into a function to test.
 """
@@ -38,8 +38,8 @@ def add_chloro_to_df(chloro_df: pd.DataFrame, spectrum_df: pd.DataFrame) -> pd.D
     Ended up just being a join call, but can use for testing.
 
     Args:
-        chloro_df (pd.DataFrame):
-        spectrum_df(pd.DataFrame):
+        chloro_df (pd.DataFrame): first DataFrame to join together
+        spectrum_df(pd.DataFrame): second DataFrame to join together
 
     Returns:
         pd.DataFrame: joined DataFrames
@@ -59,7 +59,7 @@ if __name__ == '__main__':
 
         # both DataFrames need to have their indexes set to "Leaf No." to join them
         chloro_data.set_index("Leaf No.", inplace=True)
-        # go through each sensor to update the fiels
+        # go through each sensor to update the fields
         for sensor in ALL_SENSORS:
             # get spectrum filename and data
             spectrum_filename = SPECTRUM_DATA_FOLDER / f"{leaf}_{sensor}_data.csv"
