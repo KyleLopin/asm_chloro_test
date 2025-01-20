@@ -207,7 +207,8 @@ def get_data_slices(df: pd.DataFrame, selected_column: str,
     return new_df
 
 
-def get_cleaned_data(sensor, leaf, pickle_file="final_dataset.pkl"):
+def get_cleaned_data(sensor: str, leaf: str, pickle_file: str = "final_dataset.pkl",
+                     mean: bool = False):
     """
     Load cleaned data from a pickle file and retrieve the data for a specified sensor and leaf.
     All data is the absorbance.
@@ -217,10 +218,12 @@ def get_cleaned_data(sensor, leaf, pickle_file="final_dataset.pkl"):
     sensor : str
         The name of the sensor (e.g., 'as7265x').
     leaf : str
-        The identifier of the leaf (e.g., 'leaf1').
+        The identifier of the leaf (e.g., 'mango').
     pickle_file : str, optional
         The path to the pickle file containing the cleaned dataset,
         by default 'final_dataset.pkl'.
+    mean: bool, optional
+        Boolean to specify if the spectrum data should be averaged.
 
     Returns:
     -------
@@ -243,7 +246,19 @@ def get_cleaned_data(sensor, leaf, pickle_file="final_dataset.pkl"):
             data = pickle.load(f)
 
         # Retrieve the data for the specified sensor and leaf
-        sensor_data = data.get(sensor)
+        x_columns = None # intialize incase they are gettting single AS7265x dataset
+        if sensor in ["as72651", "as72652", "as72653"]:  # if single AS7265x dataset do:
+            sensor_data = data.get("as7265x")  # have to get full data first
+            # then select wavelenghts to get later
+            if sensor == "as72651":
+                x_columns = ["610 nm", "680 nm", "730 nm", "760 nm", "810 nm", "860 nm"]
+            elif sensor == "as72652":
+                x_columns = ["560 nm", "585 nm", "645 nm", "705 nm", "900 nm", "940 nm"]
+            elif sensor == "as72653":
+                x_columns = ["410 nm", "435 nm", "460 nm", "485 nm", "510 nm", "535 nm"]
+        else:
+            sensor_data = data.get(sensor)
+
         if sensor_data is None:
             raise KeyError(f"Sensor '{sensor}' not found in the dataset.")
 
@@ -251,9 +266,19 @@ def get_cleaned_data(sensor, leaf, pickle_file="final_dataset.pkl"):
         if leaf_data is None:
             raise KeyError(f"Leaf '{leaf}' not found under sensor '{sensor}' in the dataset.")
 
+        if mean:
+            x = leaf_data["x"].set_index(leaf_data["groups"])
+            x = x.groupby(["Leaf No."]).mean(numeric_only=True)
+            y = leaf_data["y"].set_index(leaf_data["groups"])
+            y = y.groupby(["Leaf No."]).mean(numeric_only=True)
+            return x, y, x.index
         # Extract x, y, and groups
         x = leaf_data["x"]
+        if x_columns:
+            x = x[x_columns]
+        # print(x.head())
         y = leaf_data["y"]
+        # print(y.head())
         groups = leaf_data["groups"]
 
         return x, y, groups
