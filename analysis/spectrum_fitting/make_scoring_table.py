@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from sklearn.cross_decomposition import PLSRegression
-from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from sklearn.preprocessing import StandardScaler
 
 # local files
 import get_data
@@ -97,35 +97,40 @@ def create_validation_heatmaps(filename: str = "") -> None:
     plot_heatmaps(r2_data, mae_data, filename=filename)
 
 
-def make_table(sensors: list[str], filename: str = None) -> None:
+def make_table(sensors: list[str], filename: str = None, random_state=None) -> None:
     """
-        Evaluates regression models for a list of sensors across multiple leaves,
-        calculates R² and MAE scores, and generates heatmaps of the results.
+    Evaluates regression models for a list of sensors across multiple leaves,
+    calculates R² and MAE scores, and generates heatmaps of the results.
 
-        Parameters
-        ----------
-        sensors : list of str
-            A list of sensor names to be evaluated (e.g., "as7262", "as7263").
-        filename : str, optional
-            The name of the file to save the generated heatmaps as a PDF. If
-            a falsy value (e.g., `None`), the heatmaps will not be saved (default is `None`).
+    Parameters
+    ----------
+    sensors : list of str
+        A list of sensor names to be evaluated (e.g., "as7262", "as7263").
+    filename : str, optional
+        The name of the file to save the generated heatmaps as a PDF. If
+        a falsy value (e.g., `None`), the heatmaps will not be saved (default is `None`).
+    random_state: int, optional
+        The random state to pass to the helper_functions.evaluate_model_scores function.
+        Used so when making figures, the numbers will stay the same so the manuscript does not
+        have to be updated if making small changes to figure.
+        Defaults to no random_state which will make each new run slightly different.
 
-        Returns
-        -------
-        None
-            Displays R² and MAE pivot tables and generates heatmaps.
-            Optionally saves the heatmaps if `filename` is specified.
+    Returns
+    -------
+    None
+        Displays R² and MAE pivot tables and generates heatmaps.
+        Optionally saves the heatmaps if `filename` is specified.
 
-        Notes
-        -----
-        - For each sensor and leaf combination, the function evaluates a regression model using
-          partial least squares regression (PLS) with specific configurations
-          based on the sensor type.
-        - Data for each sensor and leaf is preprocessed and scaled before model evaluation.
-        - The results are stored in a DataFrame, which is then pivoted to create tables
-          for R² and MAE scores.
-        - Heatmaps for R² and MAE are generated and displayed with the function plot_heatmaps.
-        """
+    Notes
+    -----
+    - For each sensor and leaf combination, the function evaluates a regression model using
+      partial least squares regression (PLS) with specific configurations
+      based on the sensor type.
+    - Data for each sensor and leaf is preprocessed and scaled before model evaluation.
+    - The results are stored in a DataFrame, which is then pivoted to create tables
+      for R² and MAE scores.
+    - Heatmaps for R² and MAE are generated and displayed with the function plot_heatmaps.
+    """
     # Initialize an empty list to store results
     results = []
 
@@ -134,14 +139,14 @@ def make_table(sensors: list[str], filename: str = None) -> None:
         for leaf in LEAVES:
             print(sensor, leaf)
             # set the proper led for the sensor
-            led = "White LED"
+            # led = "White LED"
 
             if sensor == "as7262":
                 regressor = PLSRegression(n_components=pls_n_comps[sensor][leaf])
             elif sensor == "as7263":
                 regressor = PLSRegression(n_components=pls_n_comps[sensor][leaf])
             elif sensor == "as7265x":
-                led = "b'White IR'"
+                # led = "b'White IR'"
                 regressor = PLSRegression(n_components=pls_n_comps[sensor][leaf])
                 # regressor = LassoLarsIC("aic")
                 # regressor = ARDRegression(lambda_2=0.001)
@@ -192,7 +197,6 @@ def make_table(sensors: list[str], filename: str = None) -> None:
                 x = x[["410 nm", "435 nm", "460 nm", "485 nm", "510 nm", "535 nm"]]
 
             x = StandardScaler().fit_transform(x)
-            # x = PolynomialFeatures(degree=2).fit_transform(x)
             y = y['Avg Total Chlorophyll (µg/cm2)']
 
             # Convert y to a pandas Series with groups as the index,
@@ -210,7 +214,7 @@ def make_table(sensors: list[str], filename: str = None) -> None:
             # Evaluate the scores for the current data
             scores = helper_functions.evaluate_model_scores(
                 x, y, groups, regressor=regressor, n_splits=N_SPLITS,
-                group_by_mean=False
+                group_by_mean=False, random_state=random_state
             )
 
             results.append({
@@ -255,9 +259,9 @@ def plot_heatmaps(r2_data: pd.DataFrame, mae_data: pd.DataFrame,
     Parameters
     ----------
     r2_data : pd.DataFrame
-        DataFrame containing the R² values for the heatmap.
+        R² values for the heatmap.
     mae_data : pd.DataFrame
-        DataFrame containing the MAE values for the heatmap.
+        MAE values for the heatmap.
     filename : str, optional
         The name of the file to save the heatmaps as a PDF. If a falsy value
         (e.g., "" or None) is provided, the heatmaps are not saved (default is "").
@@ -376,7 +380,8 @@ if __name__ == '__main__':
     #            filename="3_sensors.pdf")
     # make_table(["as7262"])
     #            # filename="Individual_AS7265x_chips.pdf")
-    # make_table(["as7265x", "as72651", "as72652", "as72653"],
-    #            filename="as7265x_individual_sensors.jpeg")
+    make_table(["as7265x", "as72651", "as72652", "as72653"],
+               filename="as7265x_individual_sensors.jpeg",
+               random_state=56)
 
-    create_validation_heatmaps(filename="validation_scores.jpeg")
+    # create_validation_heatmaps(filename="validation_scores.jpeg")
