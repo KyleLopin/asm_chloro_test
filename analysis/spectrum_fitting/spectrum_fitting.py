@@ -38,9 +38,11 @@ pls_n_comps = {"as7262": {"banana": 6, "jasmine": 4, "mango": 5, "rice": 6, "sug
                "as7263": {"banana": 5, "jasmine": 5, "mango": 5, "rice": 5, "sugarcane": 5},
                "as7265x": {"banana": 8, "jasmine": 14, "mango": 11, "rice": 6, "sugarcane": 6}}
 
-CV_REPEATS = 10  # 200 for figure, 10 for formatting figure
+CV_REPEATS = 200  # 200 for figure, 10 for formatting figure
 TEST_SIZE = 0.2
-CV = StratifiedGroupShuffleSplit(n_splits=CV_REPEATS, test_size=TEST_SIZE, n_bins=10)
+RANDOM_STATE = 42
+CV = StratifiedGroupShuffleSplit(n_splits=CV_REPEATS, test_size=TEST_SIZE, n_bins=10,
+                                 random_state=RANDOM_STATE)
 SENSORS = ["as7262", "as7263", "as7265x"]
 TRAINING_SIZES = [0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
@@ -135,9 +137,6 @@ def graph_y_predicted_vs_y_actual(
     # Split the data into training and testing sets
     splitter = CV
     train_idx, test_idx = next(splitter.split(x, y, groups))
-    print("after splitter")
-    print(y.shape)
-    print(y.iloc[train_idx].shape)
     # Train and test data
     x_train, x_test = x[train_idx], x[test_idx]
     y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
@@ -197,6 +196,32 @@ def graph_y_predicted_vs_y_actual(
 
 
 def make_leaf_figure(leaf: str):
+    """
+        Generate a figure displaying prediction and learning curve plots for a given leaf.
+
+        The function creates a grid layout with 4 rows:
+        - The top 3 rows contain full-width plots of predicted vs. actual chlorophyll values
+          for three different sensors (AS7262, AS7263, AS7265x).
+        - The bottom row contains three learning curve plots, one for each sensor.
+
+        Parameters
+        ----------
+        leaf : str
+            The name of the leaf to analyze. This is used for generating plots and the title.
+
+        Notes
+        -----
+        - Prediction axes (`pred_axes`) show actual vs. predicted chlorophyll values.
+        - Learning curve axes (`lc_axes`) display training set size vs. mean absolute error (MAE).
+        - The MAE y-axis is inverted (negative values displayed as positive labels).
+        - Plots are styled with consistent tick formatting and annotations for sensor comparison.
+        - A combined y-axis label is added to describe measured chlorophyll.
+
+        Outputs
+        -------
+        - The figure is saved with the leaf name included in the filename.
+
+    """
     # learning_curves.set_style()  # keep orange and blue colors like classic style
     # Create the figure and GridSpec
     figure = plt.figure(figsize=(7, 8), constrained_layout=False)
@@ -223,9 +248,12 @@ def make_leaf_figure(leaf: str):
 
         y = y['Avg Total Chlorophyll (µg/cm2)']
         x = StandardScaler().fit_transform(x)
-
+        # make top 3 figures of predicted versus actual
         graph_y_predicted_vs_y_actual(x, y, groups, regressor=pls,
                                       ax=pred_axes[i])
+        pred_axes[i].annotate(f"{chr(i+97)})", (0.02, 0.94), xycoords='axes fraction',
+                              fontsize=14, fontweight='bold', va='top')
+
         LearningCurveDisplay.from_estimator(
             pls, x, y, groups=groups, cv=CV, scoring='neg_mean_absolute_error',
             train_sizes=TRAINING_SIZES,
@@ -241,11 +269,14 @@ def make_leaf_figure(leaf: str):
         lc_axes[i].set_xticks(ticks=num_leaves,
                               labels=labels)
         lc_axes[i].set_xlabel("Number of Leaves in Training Set")  # Update x-axis label
-        pred_axes[i].annotate(f"AS{sensor[2:]}", xy=(LEFT_ALIGN, 0.83),
+        pred_axes[i].annotate(f"AS{sensor[2:]}", xy=(0.07, 0.83),
                               xycoords='axes fraction', color='#101028', fontsize='large',
                               fontweight='bold')
         lc_axes[i].annotate(f"AS{sensor[2:]}", xy=(0.4, 0.12),
                             xycoords='axes fraction', color='#101028', fontsize='large')
+        lc_axes[i].annotate(f"{chr(i + 100)})", (0.15, 0.18), xycoords='axes fraction',
+                            fontsize=14, fontweight='bold', va='top')
+
         if i == 0:
             pred_axes[i].legend(loc='upper center', bbox_to_anchor=(0.45, 1.05),
                                 ncol=2, frameon=True)
@@ -274,9 +305,11 @@ def make_leaf_figure(leaf: str):
                 fontsize=12)
 
     # Save the figure
-    # figure.savefig(f'{leaf}_leaf_total_chlorophyll.jpg', dpi=600)
-    plt.show()
+    figure.savefig(f'{leaf}_leaf_total_chlorophyll.jpeg', dpi=600)
+    # plt.show()
 
 
 if __name__ == '__main__':
-    make_leaf_figure("jasmine")
+    # make_leaf_figure("mango")
+    for _leaf in ["banana", "jasmine", "mango", "rice", "sugarcane"]:
+        make_leaf_figure(_leaf)
