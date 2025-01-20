@@ -2,7 +2,8 @@
 
 """
 To make Figure 5 of manuscript use this function: visualize_raw_and_reflectance
-To make Figure 6 use: visualize_4_leaves_3_sensors
+
+To make Figure 7 use: visualize_4_leaves_3_sensors
 Make functions to visualize data from as7262, as7263 and as7265x color sensor data
 for the chlorophyll data.
 """
@@ -134,28 +135,28 @@ def visualize_raw_data(ax: plt.Axes = None, sensor: str = "as7262",
 def visualize_4_leaves_3_sensors():
     """ Function to make manuscript figure 6
 
-        Visualize reflectance data for 4 different leaves and 3 sensors, generating
-        12 subplots in a 6x2 grid. Each plot represents the reflectance spectrum
-        for a specific leaf and sensor combination, with lines colored based on
-        chlorophyll levels.
+    Visualize reflectance data for 4 different leaves and 3 sensors, generating
+    12 subplots in a 6x2 grid. Each plot represents the reflectance spectrum
+    for a specific leaf and sensor combination, with lines colored based on
+    chlorophyll levels.
 
-        Shared x-axes for wavelength and y-axes are scaled based on the sensor to better compare
-        the spectrum between sensors.
-        The color map for the  reflectance lines is based on the chlorophyll levels,
-        with mean lines displayed in black for each plot.
-        A color bar indicates the chlorophyll levels.
+    Shared x-axes for wavelength and y-axes are scaled based on the sensor to better compare
+    the spectrum between sensors.
+    The color map for the  reflectance lines is based on the chlorophyll levels,
+    with mean lines displayed in black for each plot.
+    A color bar indicates the chlorophyll levels.
 
-        Returns:
-        --------
-        None
-            Displays the reflectance plots and adds a color bar, or saves the figure.
-            Use line comments to change between displaying or saving the figure.
+    Returns:
+    --------
+    None
+        Displays the reflectance plots and adds a color bar, or saves the figure.
+        Use line comments to change between displaying or saving the figure.
 
-        Notes:
-        ------
-        - Reflectance is normalized and plotted for wavelengths 410 to 940 nm.
-        - Labels on the x-axis are selectively displayed to avoid clutter.
-        - The function dynamically adjusts subplot settings to optimize space.
+    Notes:
+    ------
+    - Reflectance is normalized and plotted for wavelengths 410 to 940 nm.
+    - Labels on the x-axis are selectively displayed to avoid clutter.
+    - The function dynamically adjusts subplot settings to optimize space.
     """
     plt.style.use('seaborn-v0_8')
     fig, axs = plt.subplots(6, 2, sharex="col",
@@ -173,9 +174,10 @@ def visualize_4_leaves_3_sensors():
 
         # axs[i % 6][j].annotate(f"AS{sensor[2:]}", (0.02, 0.90), xycoords='axes fraction',
         #                        fontsize=12, fontweight='bold', va='top')
-        axs[i % 6][j].annotate(f"{chr(i+97)}", (0.02, 0.92), xycoords='axes fraction',
-                               fontsize=12, fontweight='bold', va='top')
+        axs[i % 6][j].annotate(f"{chr(i+97)})", (0.02, 0.92), xycoords='axes fraction',
+                               fontsize=14, fontweight='bold', va='top')
         sensor_coords = (0.65, 0.20)
+        int_time = 50
         if sensor == "as7262":
             axs[i % 6][j].annotate(leaf.capitalize(), (0.65, 0.80), xycoords='axes fraction',
                                    fontsize=12, fontweight='bold', va='top')
@@ -183,15 +185,16 @@ def visualize_4_leaves_3_sensors():
         elif sensor == "as7265x":
             led = "b'White IR'"
             axs[i % 6][j].set_ylim([0, 0.68])
-        else:
+        else:  # AS7263
             axs[i % 6][j].set_ylim([0, 0.90])
+            int_time = 250
             # sensor_coords = (0.10, 0.20)
         # add caption for each sensor
         # axs[i % 6][j].annotate(f"AS{sensor[2:]}", sensor_coords, xycoords='axes fraction',
         #                        fontsize=10, fontweight='bold', va='top')
 
         x, y, groups = get_data.get_x_y(sensor=sensor, leaf=leaf, measurement_type="reflectance",
-                                        int_time=50, led=led, led_current="12.5 mA",
+                                        int_time=int_time, led=led, led_current="12.5 mA",
                                         send_leaf_numbers=True)
         y = y["Avg Total Chlorophyll (µg/cm2)"]
         wavelengths = x.columns
@@ -244,7 +247,7 @@ def visualize_4_leaves_3_sensors():
     # Adjust the label padding (distance from the color bar)
     color_bar.set_label(r'Total Chlorophyll ($\mu$g/cm$^2$)',
                         labelpad=-1)
-    fig.savefig("Fig_raw_data_w_outliers.pdf", dpi=300, format='pdf')
+    fig.savefig("reflectance_data_w_outliers.jpeg", dpi=600)
     plt.show()
 
 
@@ -268,7 +271,7 @@ def visualize_raw_and_reflectance():
     for i, (sensor, led) in enumerate(zip(sensors, leds)):
         # add a-d on left figures
         axs[i][0].annotate(f"{chr(i+97)})", (0.02, 0.95), xycoords='axes fraction',
-                           fontsize=12, fontweight='bold', va='top')
+                           fontsize=14, fontweight='bold', va='top')
         # add e-h on right side figures
         axs[i][1].annotate(f"{chr(i + 101)})", (0.02, 0.95), xycoords='axes fraction',
                            fontsize=12, fontweight='bold', va='top')
@@ -326,7 +329,7 @@ def visualize_raw_and_reflectance():
     # add column titles
     axs[0][0].set_title("Raw reflected light intensity")
     axs[0][1].set_title('Relative Reflectance')
-    figure.suptitle(f"{FRUIT.capitalize()} leaf reflectance")
+    figure.suptitle(f"{FRUIT.capitalize()} leaf reflectance", fontsize=14)
 
     # Apply tight_layout to automatically adjust subplot spacing
     plt.tight_layout()
@@ -343,7 +346,7 @@ def visualize_raw_and_reflectance():
     color_bar.set_label(r'Total Chlorophyll ($\mu$g/cm$^2$)',
                         labelpad=-1)
     # plt.show()
-    figure.savefig("Fig5.pdf", dpi=300, format='pdf')
+    figure.savefig("raw_and_reflectance_data.jpeg", dpi=600)
 
 
 def visualize_2_sensor_raw_data(save_filename: str = ""):
@@ -471,12 +474,12 @@ def visualize_as7265x_different_leds(leds: list[str], save_filename: str = ""):
 
 if __name__ == '__main__':
     if True:
-        # visualize_raw_and_reflectance()
+        visualize_raw_and_reflectance()
         visualize_4_leaves_3_sensors()
 
     if False:
         visualize_3_sensor_raw_data()
-    if Flase:
+    if False:
         visualize_as7265x_different_leds(leds=["b'UV'", "b'White'"])
         plt.show()
     #     visualize_as7265x_different_leds(leds=["b'UV'", "b'IR'"], save_filename=
