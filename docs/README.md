@@ -11,6 +11,14 @@ This project includes:
 
 ---
 
+## 📄 Publication
+
+This repository supports the manuscript:  
+**Evaluation of Low-Cost Multi-Spectral Sensors for Measuring Chlorophyll Levels Across Diverse Leaf Types**  
+Published in *Sensors*, 2024. [Read the paper here](https://www.mdpi.com/1424-8220/25/7/2198)
+
+---
+
 ## Project Structure
 
 - **source/**
