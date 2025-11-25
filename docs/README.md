@@ -32,7 +32,7 @@ Published in *Sensors*, 2024. [Read the paper here](https://www.mdpi.com/1424-82
   - Contains input sensor data files and processed datasets.
   - Includes chlorophyll concentration measurements and corresponding spectroscopic readings.
 
-- **analysis/**
+- **analysis/spectrum_fitting/**
   - Contains main analysis and testing scripts.
   - Includes functions for:
     - Data preprocessing (removing chlorophyll and spectral outliers)
